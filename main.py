@@ -4,8 +4,24 @@ import plotly.graph_objs as go
 import matplotlib.pyplot as plt
 from plotly.offline import iplot
 import seaborn as sns
+from imblearn.over_sampling import SMOTE
+from collections import Counter
+from sklearn.dummy import DummyClassifier
+from sklearn.model_selection import RepeatedKFold, cross_val_score, train_test_split, cross_val_predict, GridSearchCV, \
+    KFold, RandomizedSearchCV
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report, \
+    roc_auc_score
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from imblearn.combine import SMOTETomek
 import zipfile
+import gc
+# from sklearn.pipeline import Pipeline
+from imblearn.pipeline import Pipeline
+from imblearn.under_sampling import RandomUnderSampler
+from sklearn.metrics import roc_auc_score, roc_curve, auc
 
+categorical_columns = []
 # Importing files from a zip repository and
 path = r"\Users\Utilisateur\Downloads\Data_P7.zip"  #### le chemin vers le répertoire zip des données
 with zipfile.ZipFile(path, "r") as zfile:
@@ -14,26 +30,19 @@ with zipfile.ZipFile(path, "r") as zfile:
            }
     zfile.close()
 
-def import_data():
-    application_train = dfs['application_train']
-    application_test = dfs['application_test']
-    bureau = dfs['bureau']
-    credit_card_balance = dfs['credit_card_balance']
-    bureau_balance = dfs['bureau_balance']
-    previous_application =  dfs['previous_application']
 
-import_data()
+
 # One-hot encoding for categorical columns with get_dummies
-def one_hot_encoder(data, nan_as_category=True):
+def one_hot_encoder(data, nan_as_category=True,drop_first=True):
     original_columns = list(data.columns)
-    categorical_columns = [col for col in data.columns if data[col].dtype == 'object']
-    data = pd.get_dummies(data, columns=categorical_columns, dummy_na=nan_as_category)
+    cat_columns = [col for col in data.columns if data[col].dtype == 'object']
+    data = pd.get_dummies(data, columns=cat_columns, dummy_na=nan_as_category, drop_first=drop_first)
     new_columns = [c for c in data.columns if c not in original_columns]
     return data, new_columns
 
 
 # table principale pour entrainement
-def application_train_test(nan_as_category=False):
+def application_train_test(nan_as_category=False, drop_first=True):
     # Read data and merge
     application_train = dfs['application_train']
     application_test = dfs['application_test']
@@ -58,17 +67,21 @@ def application_train_test(nan_as_category=False):
     df['PAYMENT_RATE'] = df['AMT_ANNUITY'] / df['AMT_CREDIT']
     df['CONSUMER_GOODS_RATIO'] = df['AMT_CREDIT'] / df['AMT_GOODS_PRICE']
     # Categorical features with One-Hot encode
-    df, cat_cols = one_hot_encoder(df, False)
+    df, cat_cols = one_hot_encoder(df, nan_as_category=nan_as_category, drop_first=drop_first)
+    global categorical_columns
+    categorical_columns = categorical_columns + list(df.select_dtypes(include='object').columns) + cat_cols
     return df
 
 
 # Preprocess bureau.csv and bureau_balance.csv
-def bureau_and_balance(nan_as_category=True):
+def bureau_and_balance(nan_as_category=True,drop_first=True):
     bureau = dfs['bureau']
     bb = dfs['bureau_balance']
-    bb, bb_cat = one_hot_encoder(bb, nan_as_category)
-    bureau, bureau_cat = one_hot_encoder(bureau, nan_as_category)
-
+    bb, bb_cat = one_hot_encoder(bb, nan_as_category=nan_as_category, drop_first=drop_first)
+    bureau, bureau_cat = one_hot_encoder(bureau, nan_as_category=nan_as_category, drop_first=False)
+    global categorical_columns
+    categorical_columns = categorical_columns + bureau_cat + bb_cat + list(
+        bureau.select_dtypes(include='object').columns) + list(bb.select_dtypes(include='object').columns)
     # Bureau balance: Perform aggregations and merge with bureau.csv
     bb_aggregations = {'MONTHS_BALANCE': ['min', 'max', 'size']}
     for col in bb_cat:
@@ -78,7 +91,7 @@ def bureau_and_balance(nan_as_category=True):
     bureau = bureau.join(bb_agg, how='left', on='SK_ID_BUREAU')
     bureau.drop(['SK_ID_BUREAU'], axis=1, inplace=True)
     del bb, bb_agg
-
+    gc.collect()
     # Bureau and bureau_balance numeric features
     num_aggregations = {
         'DAYS_CREDIT': ['min', 'max', 'mean', 'var'],
@@ -111,21 +124,23 @@ def bureau_and_balance(nan_as_category=True):
     active_agg.columns = pd.Index(['ACTIVE_' + e[0] + "_" + e[1].upper() for e in active_agg.columns.tolist()])
     bureau_agg = bureau_agg.join(active_agg, how='left', on='SK_ID_CURR')
     del active, active_agg
-
+    gc.collect()
     # Bureau: Closed credits - using only numerical aggregations
     closed = bureau[bureau['CREDIT_ACTIVE_Closed'] == 1]
     closed_agg = closed.groupby('SK_ID_CURR').agg(num_aggregations)
     closed_agg.columns = pd.Index(['CLOSED_' + e[0] + "_" + e[1].upper() for e in closed_agg.columns.tolist()])
     bureau_agg = bureau_agg.join(closed_agg, how='left', on='SK_ID_CURR')
     del closed, closed_agg, bureau
-
+    gc.collect()
     return bureau_agg
 
 
 # Preprocess previous_applications.csv
-def previous_applications(nan_as_category=True):
+def previous_applications(nan_as_category=True, drop_first=False):
     prev = dfs['previous_application']
-    prev, cat_cols = one_hot_encoder(prev, nan_as_category=True)
+    prev, cat_cols = one_hot_encoder(prev, nan_as_category=nan_as_category, drop_first=drop_first)
+    global categorical_columns
+    categorical_columns = categorical_columns + list(prev.select_dtypes(include='object').columns) + cat_cols
     # Days 365.243 values -> nan
     prev['DAYS_FIRST_DRAWING'].replace(365243, np.nan, inplace=True)
     prev['DAYS_FIRST_DUE'].replace(365243, np.nan, inplace=True)
@@ -152,7 +167,6 @@ def previous_applications(nan_as_category=True):
     for cat in cat_cols:
         cat_aggregations[cat] = ['mean']
 
-
     prev_agg = prev.groupby('SK_ID_CURR').agg({**num_aggregations, **cat_aggregations})
     prev_agg.columns = pd.Index(['PREV_' + e[0] + "_" + e[1].upper() for e in prev_agg.columns.tolist()])
     # Previous Applications: Approved Applications - only numerical features
@@ -166,14 +180,16 @@ def previous_applications(nan_as_category=True):
     refused_agg.columns = pd.Index(['REFUSED_' + e[0] + "_" + e[1].upper() for e in refused_agg.columns.tolist()])
     prev_agg = prev_agg.join(refused_agg, how='left', on='SK_ID_CURR')
     del refused, refused_agg, approved, approved_agg, prev
-
+    gc.collect()
     return prev_agg
 
 
 # Preprocess POS_CASH_balance.csv
-def pos_cash(nan_as_category=True):
+def pos_cash(nan_as_category=True,drop_first=True):
     pos = dfs['POS_CASH_balance']
-    pos, cat_cols = one_hot_encoder(pos, nan_as_category=True)
+    pos, cat_cols = one_hot_encoder(pos, nan_as_category=nan_as_category, drop_first=drop_first)
+    global categorical_columns
+    categorical_columns = categorical_columns + list(pos.select_dtypes(include='object').columns) + cat_cols
     # Features
     aggregations = {
         'MONTHS_BALANCE': ['max', 'mean', 'size'],
@@ -188,14 +204,16 @@ def pos_cash(nan_as_category=True):
     # Count pos cash accounts
     pos_agg['POS_COUNT'] = pos.groupby('SK_ID_CURR').size()
     del pos
-
+    gc.collect()
     return pos_agg
 
 
 # Preprocess installments_payments.csv
-def installments_payments(nan_as_category=True):
+def installments_payments(nan_as_category=True,drop_first=True):
     ins = dfs['installments_payments']
-    ins, cat_cols = one_hot_encoder(ins, nan_as_category=True)
+    ins, cat_cols = one_hot_encoder(ins, nan_as_category=nan_as_category, drop_first=drop_first)
+    global categorical_columns
+    categorical_columns = categorical_columns + list(ins.select_dtypes(include='object').columns) + cat_cols
     # Percentage and difference paid in each installment (amount paid and installment value)
     ins['PAYMENT_PERC'] = ins['AMT_PAYMENT'] / ins['AMT_INSTALMENT']
     ins['PAYMENT_DIFF'] = ins['AMT_INSTALMENT'] - ins['AMT_PAYMENT']
@@ -222,14 +240,16 @@ def installments_payments(nan_as_category=True):
     # Count installments accounts
     ins_agg['INSTAL_COUNT'] = ins.groupby('SK_ID_CURR').size()
     del ins
-
+    gc.collect()
     return ins_agg
 
 
 # Preprocess credit_card_balance.csv
-def credit_card_balance(nan_as_category=True):
+def credit_card_balance(nan_as_category=True,drop_first=True):
     cc = dfs['credit_card_balance']
-    cc, cat_cols = one_hot_encoder(cc, nan_as_category=True)
+    cc, cat_cols = one_hot_encoder(cc,nan_as_category=nan_as_category, drop_first=drop_first)
+    global categorical_columns
+    categorical_columns = categorical_columns + list(cc.select_dtypes(include='object').columns) + cat_cols
     # General aggregations
     cc.drop(['SK_ID_PREV'], axis=1, inplace=True)
     cc_agg = cc.groupby('SK_ID_CURR').agg(['min', 'max', 'mean', 'sum', 'var'])
@@ -237,145 +257,255 @@ def credit_card_balance(nan_as_category=True):
     # Count credit card lines
     cc_agg['CC_COUNT'] = cc.groupby('SK_ID_CURR').size()
     del cc
-
+    gc.collect()
     return cc_agg
 
 
-def distribution_plot(data, var, titre):
-    plt.figure(figsize=(18, 8), dpi=100)
-    plt.hist(data[var], density=True, stacked=True,   color="red")
-    plt.title(titre)
-    plt.show()
 
 
 
-def bar_prc_plot(data, var, titre, xlab, ylab):
-    fig = plt.figure(figsize=(14, 6), dpi=200)
-    value = data[var].value_counts()
-    value = (value / data[var].count() * 100)
-    sns.barplot(y=value.values, x=value.index, hue=value.index, ci=100)
-    plt.xlabel(xlab, size=14, color="red")
-    plt.ylabel(ylab, size=14, color="red")
-    plt.title(titre, size=15)
-    plt.show()
-
-
-def pie_plot(data, var, titre):
-    plt.figure(figsize=(13, 5), dpi=200)
-    temp = data[var].value_counts()
-    plt.pie(x=temp.values, labels=temp.index,  startangle=90,  autopct='%1.1f%%')
-    plt.title(titre)
-    plt.show()
-
-def compare_plot(data, var, title):
-    temp = data[var].value_counts()
-    # print(temp.values)
-    temp_y0 = []
-    temp_y1 = []
-    for val in temp.index:
-        temp_y1.append(np.sum(data["TARGET"][data[var] == val] == 1))
-        temp_y0.append(np.sum(data["TARGET"][data[var] == val] == 0))
-    trace1 = go.Bar(
-        x=temp.index,
-        y=(temp_y1 / temp.sum()) * 100,
-        name='YES'
-    )
-    trace2 = go.Bar(
-        x=temp.index,
-        y=(temp_y0 / temp.sum()) * 100,
-        name='NO'
-    )
-
-    data_ = [trace1, trace2]
-    layout = go.Layout(
-        title=title + " of Applicant's in terms of loan is repayed or not  in %",
-        # barmode='stack',
-        width=1000,
-        xaxis=dict(
-            title=title,
-            tickfont=dict(
-                size=14,
-                color='rgb(107, 107, 107)'
-            )
-        ),
-        yaxis=dict(
-            title='Count in %',
-            titlefont=dict(
-                size=16,
-                color='rgb(107, 107, 107)'
-            ),
-            tickfont=dict(
-                size=14,
-                color='rgb(107, 107, 107)'
-            )
-        )
-    )
-
-    fig = go.Figure(data=data_, layout=layout)
-    iplot(fig)
-
-
-application_train = dfs['application_train']
-previous_application = dfs['previous_application']
 
 
 
-#   Distribution of the variable amount  credit
-distribution_plot(application_train, 'AMT_CREDIT', "Distribution Amt_credit")
-#   Distribution of the variable amount  annuity
-distribution_plot(application_train, 'AMT_ANNUITY', "Distribution AMT_ANNUITY")
-#   Distribution of the variable amount  goods  price
-distribution_plot(application_train, 'AMT_GOODS_PRICE', "Distribution AMT_GOODS_PRICE")
-#   Income Source of Applicant who applied for loan
-bar_prc_plot(application_train, 'NAME_INCOME_TYPE', "Statut professionnel demandeurs de crédit", "Statut professionnel", "Pourcentage")
-#   Occupation of Apllicant
-bar_prc_plot(application_train, 'OCCUPATION_TYPE', "Fonction demandeurs de crédit", "Fonction", "Pourcentage")
-#Education Of Applicant
-bar_prc_plot(application_train, "NAME_EDUCATION_TYPE", "Niveau d'éducation demandeurs de crédit", "Education", "Pourcentage")
-#   Family Status of Applicant
-bar_prc_plot(application_train, 'NAME_FAMILY_STATUS', "Statut familial des demandeurs de crédit", "Statut familial", "Pourcentage")
-#   housing type
-bar_prc_plot(application_train, 'NAME_HOUSING_TYPE', "Type de logement des demandeurs de crédit", "Type de logement", "Pourcentage")
-#   Loan repayed or not function of Income type  of  applicant
-compare_plot(application_train, "NAME_INCOME_TYPE", 'Income source')
-#   Loan repayed or not function of occupation type  of  applicant
-compare_plot(application_train, "OCCUPATION_TYPE", 'Occupation')
-#   Loan repayed or not function of organization type  of  applicant
-compare_plot(application_train, "ORGANIZATION_TYPE", 'Organization')
-#   Checking if data is unbalanced
-bar_prc_plot(application_train, 'TARGET', 'la répartition des classes', 'classes', 'frequency')
-#   Through which channel we acquired the client on the previous application
-bar_prc_plot(previous_application, 'CHANNEL_TYPE', "Canal par lequel nous avons acquis le client sur l'application précédente", 'CHANNEL_TYPE', 'Frequency')
-#   Status of previous  loans
-pie_plot(previous_application, 'NAME_CONTRACT_STATUS', "Statut de crédits  demandés  avant")
-#   Types of previous  loans
-pie_plot(previous_application, "NAME_CONTRACT_TYPE", "Types de crédits  demandés  avant")
-#   Types  of   loans
-pie_plot(application_train, "NAME_CONTRACT_TYPE", "Types de crédits demandés")
-#   Client Type of Previous Applications
-pie_plot(previous_application, "NAME_CLIENT_TYPE", "Types de clients effectuant des  demandes précédantes")
+
+# def distribution_plot(data, var, titre):
+#     plt.figure(figsize=(18, 8), dpi=100)
+#     plt.hist(data[var], density=True, stacked=True, color="red")
+#     plt.title(titre)
+#     plt.show()
+#
+#
+# def bar_prc_plot(data, var, titre, xlab, ylab):
+#     fig = plt.figure(figsize=(14, 6), dpi=200)
+#     value = data[var].value_counts()
+#     value = (value / data[var].count() * 100)
+#     sns.barplot(y=value.values, x=value.index, hue=value.index, ci=100)
+#     plt.xlabel(xlab, size=14, color="red")
+#     plt.ylabel(ylab, size=14, color="red")
+#     plt.title(titre, size=15)
+#     plt.show()
+#
+#
+# def pie_plot(data, var, titre):
+#     plt.figure(figsize=(13, 5), dpi=200)
+#     temp = data[var].value_counts()
+#     plt.pie(x=temp.values, labels=temp.index, startangle=90, autopct='%1.1f%%')
+#     plt.title(titre)
+#     plt.show()
+#
+#
+# def compare_plot(data, var, title):
+#     temp = data[var].value_counts()
+#     # print(temp.values)
+#     temp_y0 = []
+#     temp_y1 = []
+#     for val in temp.index:
+#         temp_y1.append(np.sum(data["TARGET"][data[var] == val] == 1))
+#         temp_y0.append(np.sum(data["TARGET"][data[var] == val] == 0))
+#     trace1 = go.Bar(
+#         x=temp.index,
+#         y=(temp_y1 / temp.sum()) * 100,
+#         name='YES'
+#     )
+#     trace2 = go.Bar(
+#         x=temp.index,
+#         y=(temp_y0 / temp.sum()) * 100,
+#         name='NO'
+#     )
+#
+#     data_ = [trace1, trace2]
+#     layout = go.Layout(
+#         title=title + " of Applicant's in terms of loan is repayed or not  in %",
+#         # barmode='stack',
+#         width=1000,
+#         xaxis=dict(
+#             title=title,
+#             tickfont=dict(
+#                 size=14,
+#                 color='rgb(107, 107, 107)'
+#             )
+#         ),
+#         yaxis=dict(
+#             title='Count in %',
+#             titlefont=dict(
+#                 size=16,
+#                 color='rgb(107, 107, 107)'
+#             ),
+#             tickfont=dict(
+#                 size=14,
+#                 color='rgb(107, 107, 107)'
+#             )
+#         )
+#     )
+#
+#     fig = go.Figure(data=data_, layout=layout)
+#     iplot(fig)
+#
+#
+# application_train = dfs['application_train']
+# previous_application = dfs['previous_application']
 
 
-def merging_data():
-    df = application_train_test()
+# #   Distribution of the variable amount  credit
+# distribution_plot(application_train, 'AMT_CREDIT', "Distribution Amt_credit")
+# #   Distribution of the variable amount  annuity
+# distribution_plot(application_train, 'AMT_ANNUITY', "Distribution AMT_ANNUITY")
+# #   Distribution of the variable amount  goods  price
+# distribution_plot(application_train, 'AMT_GOODS_PRICE', "Distribution AMT_GOODS_PRICE")
+# #   Income Source of Applicant who applied for loan
+# bar_prc_plot(application_train, 'NAME_INCOME_TYPE', "Statut professionnel demandeurs de crédit", "Statut professionnel",
+#              "Pourcentage")
+# #   Occupation of Apllicant
+# bar_prc_plot(application_train, 'OCCUPATION_TYPE', "Fonction demandeurs de crédit", "Fonction", "Pourcentage")
+# # Education Of Applicant
+# bar_prc_plot(application_train, "NAME_EDUCATION_TYPE", "Niveau d'éducation demandeurs de crédit", "Education",
+#              "Pourcentage")
+# #   Family Status of Applicant
+# bar_prc_plot(application_train, 'NAME_FAMILY_STATUS', "Statut familial des demandeurs de crédit", "Statut familial",
+#              "Pourcentage")
+# #   housing type
+# bar_prc_plot(application_train, 'NAME_HOUSING_TYPE', "Type de logement des demandeurs de crédit", "Type de logement",
+#              "Pourcentage")
+# #   Loan repayed or not function of Income type  of  applicant
+# compare_plot(application_train, "NAME_INCOME_TYPE", 'Income source')
+# #   Loan repayed or not function of occupation type  of  applicant
+# compare_plot(application_train, "OCCUPATION_TYPE", 'Occupation')
+# #   Loan repayed or not function of organization type  of  applicant
+# compare_plot(application_train, "ORGANIZATION_TYPE", 'Organization')
+# #   Checking if data is unbalanced
+# bar_prc_plot(application_train, 'TARGET', 'la répartition des classes', 'classes', 'frequency')
+# #   Through which channel we acquired the client on the previous application
+# bar_prc_plot(previous_application, 'CHANNEL_TYPE',
+#              "Canal par lequel nous avons acquis le client sur l'application précédente", 'CHANNEL_TYPE', 'Frequency')
+# #   Status of previous  loans
+# pie_plot(previous_application, 'NAME_CONTRACT_STATUS', "Statut de crédits  demandés  avant")
+# #   Types of previous  loans
+# pie_plot(previous_application, "NAME_CONTRACT_TYPE", "Types de crédits  demandés  avant")
+# #   Types  of   loans
+# pie_plot(application_train, "NAME_CONTRACT_TYPE", "Types de crédits demandés")
+# #   Client Type of Previous Applications
+# pie_plot(previous_application, "NAME_CLIENT_TYPE", "Types de clients effectuant des  demandes précédantes")
+
+
+def merging_data(random_state):
+    data = application_train_test()
     bureau = bureau_and_balance()
-    df = df.join(bureau, how='left', on='SK_ID_CURR')
+    data = data.join(bureau, how='left', on='SK_ID_CURR')
     del bureau
 
     prev = previous_applications()
-    df = df.join(prev, how='left', on='SK_ID_CURR')
+    data = data.join(prev, how='left', on='SK_ID_CURR')
     del prev
 
     pos = pos_cash()
-    df = df.join(pos, how='left', on='SK_ID_CURR')
+    data = data.join(pos, how='left', on='SK_ID_CURR')
     del pos
 
     ins = installments_payments()
-    df = df.join(ins, how='left', on='SK_ID_CURR')
+    data = data.join(ins, how='left', on='SK_ID_CURR')
     del ins
 
     cc = credit_card_balance()
-    df = df.join(cc, how='left', on='SK_ID_CURR')
+    data = data.join(cc, how='left', on='SK_ID_CURR')
     del cc
+    gc.collect()
+    global categorical_columns
+    b = list(set(categorical_columns) - (set(categorical_columns) - set(list(data.columns))))
+    data = data.dropna(subset=['TARGET'])
+    data.replace([np.inf, -np.inf], np.nan, inplace=True)
+    data[b] = data[b].fillna(-1)
+    a = list(set(data.columns) - set(b))
+    data[a] = data[a].fillna(data[a].median())
+    data = data.dropna()
+    data = reduce_mem_usage(data)
+    y = data['TARGET']
+    data = data.drop(['TARGET'], axis=1)
+    data.info(memory_usage='deep')
+    columns = list(data.columns)
+    x_tr, x_val, y_tr, y_val = train_test_split(data, y, test_size=0.2, random_state=random_state)
+    scaler = StandardScaler()
+    scaler.fit(x_tr)
+    x_tr = scaler.transform(x_tr)
+    x_vali = scaler.transform(x_val)
+    print(type(x_tr))
+    print(type(x_val))
+    print(type(x_vali))
+    return x_tr, x_vali, y_tr, y_val, columns, scaler, x_val
 
-    return df
+
+def mem_usage(pandas_obj):
+    if isinstance(pandas_obj, pd.DataFrame):
+        usage_b = pandas_obj.memory_usage(deep=True).sum()
+    else:
+        usage_b = pandas_obj.memory_usage(deep=True)
+    usage_mb = usage_b / 1024 ** 2  # convertir les bytes en megabytes
+    return "{:03.2f} MB".format(usage_mb)  # afficher sous format nombre (min 3 chiffres) et une précision
+
+
+def reduce_mem_usage(df1):
+    df1.info(memory_usage='deep')
+    df_float = df1.select_dtypes(include=['float']).copy()
+    converted_float = df_float.apply(pd.to_numeric, downcast='float')
+    df_int = df1.select_dtypes(include=['int']).copy()
+    converted_int = df_int.apply(pd.to_numeric, downcast='integer')
+    # converted_float.info(memory_usage='deep')
+    a = mem_usage(df_int)
+    b = mem_usage(converted_int)
+    a1 = mem_usage(df_float)
+    b1 = mem_usage(converted_float)
+    a2 = (float(a1.replace('MB', '')) + float(a.replace('MB', '')))
+    b2 = (float(b1.replace('MB', '')) + float(b.replace('MB', '')))
+    c = 100 * (float(b1.replace('MB', '')) + float(b.replace('MB', ''))) / (
+            float(a1.replace('MB', '')) + float(a.replace('MB', '')))
+    print("L'utilisation de la mémoire avant traitement:{}".format(a2))
+    print("L'utilisation de la mémoire après traitement:{}".format(b2))
+    print("le gain en mémoire est de:{:.2f}%".format(c))
+    df1[converted_float.columns] = converted_float
+    df1[converted_int.columns] = converted_int
+    del a, b, a1, a2, b1, b2, c
+    gc.collect()
+    return df1
+
+
+x_train, x_valid, y_train, y_valid, list_colonnes, std_scaler, x_exp = merging_data(42)
+
+
+def data_balance(data, y):
+    count = Counter(y)
+    percent = {key: 100 * value / len(y) for key, value in count.items()}
+    print("avant de balancer le dataset, la répartiti   ondes   classes en  %   était:", percent)  # pourcentage
+    # data = reduce_mem_usage(data)
+    balancer = SMOTETomek(random_state=42)
+    data, y = balancer.fit_resample(data, y)
+    count = Counter(y)
+    percent = {key: 100 * value / len(y) for key, value in count.items()}
+    print("Les classes après  balance dataset:", percent)
+    return data, y
+
+
+def performance(y, prediction):
+    print("accuracy", accuracy_score(y, prediction))
+    print("f1 score macro", f1_score(y, prediction, average='macro'))
+    print("f1 score micro", f1_score(y, prediction, average='micro'))
+    print("precision score", precision_score(y, prediction, average='macro'))
+    print("recall score", recall_score(y, prediction, average='macro'))
+    print("classification_report", classification_report(y, prediction))
+
+
+
+
+def random_classifier(random_state, x_tr, x_val, y_tr, y_val):
+    dummy_clf = DummyClassifier(strategy="stratified", random_state=random_state).fit(x_tr, y_tr)
+    predicted = cross_val_predict(dummy_clf, x_tr, y_tr)
+    print("Performances en phase d'entrainement")
+    performance(y_tr, predicted)
+    predicted_valid = cross_val_predict(dummy_clf, x_val, y_val)
+    print("Performances en phase de test")
+    performance(y_val, predicted_valid)
+    print("Training AUC&ROC", roc_auc_score(y_tr, dummy_clf.predict_proba(x_tr)[:, 1]))
+    print("Testing AUC&ROC", roc_auc_score(y_val,  dummy_clf.predict_proba(x_val)[:, 1]))
+    return dummy_clf
+
+random_classifier(42,x_train, x_valid, y_train, y_valid)
+
+
