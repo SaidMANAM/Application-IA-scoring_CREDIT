@@ -8,7 +8,7 @@ from imblearn.over_sampling import SMOTE
 from collections import Counter
 from sklearn.dummy import DummyClassifier
 from sklearn.model_selection import RepeatedKFold, cross_val_score, train_test_split, cross_val_predict, GridSearchCV, \
-    KFold, RandomizedSearchCV
+    KFold, RandomizedSearchCV, cross_validate
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report, \
     roc_auc_score
 from sklearn.ensemble import RandomForestClassifier
@@ -16,6 +16,7 @@ from sklearn.preprocessing import StandardScaler
 from imblearn.combine import SMOTETomek
 import zipfile
 import gc
+
 # from sklearn.pipeline import Pipeline
 from imblearn.pipeline import Pipeline
 from imblearn.under_sampling import RandomUnderSampler
@@ -485,27 +486,71 @@ def data_balance(data, y):
 
 def performance(y, prediction):
     print("accuracy", accuracy_score(y, prediction))
-    print("f1 score macro", f1_score(y, prediction, average='macro'))
-    print("f1 score micro", f1_score(y, prediction, average='micro'))
-    print("precision score", precision_score(y, prediction, average='macro'))
-    print("recall score", recall_score(y, prediction, average='macro'))
-    print("classification_report", classification_report(y, prediction))
+    print("f1 score macro", f1_score(y, prediction, average='micro'))
+    print("precision score", precision_score(y, prediction, average='micro'))
+    print("recall score", recall_score(y, prediction, average='micro'))
+    print("classification_report    \n", classification_report(y, prediction))
+
+# def random_classifier(random_state, x_tr, x_val, y_tr, y_val):
+#     dummy_clf = DummyClassifier(strategy="stratified", random_state=random_state).fit(x_tr, y_tr)
+#     predicted = cross_val_predict(dummy_clf, x_tr, y_tr)
+#     print("Performances en phase d'entrainement")
+#     performance(y_tr, predicted)
+#     predicted_valid = cross_val_predict(dummy_clf, x_val, y_val)
+#     print("Performances en phase de test")
+#     performance(y_val, predicted_valid)
+#     print("Training AUC&ROC", roc_auc_score(y_tr, dummy_clf.predict_proba(x_tr)[:, 1]))
+#     print("Testing AUC&ROC", roc_auc_score(y_val,  dummy_clf.predict_proba(x_val)[:, 1]))
+#     return dummy_clf
+
+#  random_classifier(42,x_train, x_valid, y_train, y_valid)
 
 
+def random_forest_classifier(random_state, x_tr, x_val, y_tr, y_val):
+    over = SMOTE(random_state=42,sampling_strategy=0.1)
+    under = RandomUnderSampler(sampling_strategy=0.5)
+    steps = [('over', over),('under', under), ('model', RandomForestClassifier(random_state=random_state))]
+    pipe = Pipeline(steps=steps)
+    cv = KFold(n_splits=3)
+
+    # Number of trees in random forest
+    n_estimators = np.linspace(start=10, stop=80, num=10, dtype=int)
+     # Number of features to consider at every split
+    max_features = ['auto', 'sqrt']
+
+     # Maximum number of levels in tree
+    max_depth = [2, 4]
+#     # Minimum number of samples required to split a node
+    min_samples_split = [2, 5]
+#     # Minimum number of samples required at each leaf node
+    min_samples_leaf = [1, 2]
+#     # Method of selecting samples for training each tree
+    bootstrap = [True, False]
+#
+#     # Create the param grid
+    param_grid = {'model__n_estimators': n_estimators,
+                  'model__max_features': max_features,
+                  'model__max_depth': max_depth,
+                  'model__min_samples_split': min_samples_split,
+                  'model__min_samples_leaf': min_samples_leaf,
+                  'model__bootstrap': bootstrap
+                  }
+
+    grid_cv = RandomizedSearchCV(estimator=pipe, param_distributions=param_grid, n_iter=2, cv=cv, scoring='roc_auc',
+                                 random_state=random_state, n_jobs=-1,  verbose=True, refit=True,error_score='raise')
+    print('cross validation')
+    grid_cv.fit(x_tr, y_tr)
+    best_params = grid_cv.best_params_
+    best_model = grid_cv.best_estimator_
+    scores= cross_validate( best_model, x_tr, y=y_tr, scoring='roc_auc', cv=5, verbose=True,  return_train_score=True, return_estimator=True)
+    print('Train Area Under the Receiver Operating Characteristic Curve - : {:.3f} +/- {:.3f}'.format(scores['train_score'].mean(),scores['train_score'].std()))
+    print('Validation Area Under the Receiver Operating Characteristic Curve - : {:.3f} +/- {:.3f}'.format(scores['test_score'].mean(),scores['test_score'].std()))
+    print('Test Area Under the Receiver Operating Characteristic Curve - : {:.3f}'.format(roc_auc_score(y_val, best_model['model'].predict_proba(x_val)[:, 1])))
+    print(best_model)
+    return best_params, best_model
+
+params, rf_model = random_forest_classifier(42, x_train, x_valid, y_train, y_valid)
 
 
-def random_classifier(random_state, x_tr, x_val, y_tr, y_val):
-    dummy_clf = DummyClassifier(strategy="stratified", random_state=random_state).fit(x_tr, y_tr)
-    predicted = cross_val_predict(dummy_clf, x_tr, y_tr)
-    print("Performances en phase d'entrainement")
-    performance(y_tr, predicted)
-    predicted_valid = cross_val_predict(dummy_clf, x_val, y_val)
-    print("Performances en phase de test")
-    performance(y_val, predicted_valid)
-    print("Training AUC&ROC", roc_auc_score(y_tr, dummy_clf.predict_proba(x_tr)[:, 1]))
-    print("Testing AUC&ROC", roc_auc_score(y_val,  dummy_clf.predict_proba(x_val)[:, 1]))
-    return dummy_clf
-
-random_classifier(42,x_train, x_valid, y_train, y_valid)
 
 
