@@ -16,11 +16,14 @@ from sklearn.preprocessing import StandardScaler
 from imblearn.combine import SMOTETomek
 import zipfile
 import gc
+import shap
+import warnings
 
 # from sklearn.pipeline import Pipeline
 from imblearn.pipeline import Pipeline
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.metrics import roc_auc_score, roc_curve, auc
+from sklearn.metrics import make_scorer
 
 categorical_columns = []
 # Importing files from a zip repository and
@@ -431,7 +434,7 @@ def merging_data(random_state):
     print(type(x_tr))
     print(type(x_val))
     print(type(x_vali))
-    return x_tr, x_vali, y_tr, y_val, columns, scaler, x_val
+    return x_tr, x_vali, y_tr, y_val, columns, scaler, x_val,data, y
 
 
 def mem_usage(pandas_obj):
@@ -440,7 +443,15 @@ def mem_usage(pandas_obj):
     else:
         usage_b = pandas_obj.memory_usage(deep=True)
     usage_mb = usage_b / 1024 ** 2  # convertir les bytes en megabytes
-    return "{:03.2f} MB".format(usage_mb)  # afficher sous format nombre (min 3 chiffres) et une précision
+    return "{:03.2f} MB".format(usage_mb)  # afficher sous format nombre (min 3 chiffres) et une précisionµ
+
+def cost_function(y_true, y_pred, **kwargs):
+    #pred = estimator.predict(X)
+    global x
+    cost = (((y_pred == 0) & (y_true==0))*x['AMT_CREDIT'] * (0.03)
+            -((y_pred == 1) & (y_true==0))*x['AMT_CREDIT'] * (0.03)
+            -((y_pred == 0) & (y_true==1))*x['AMT_CREDIT'] * (1+0.03))
+    return np.sum(cost)
 
 
 def reduce_mem_usage(df1):
@@ -468,7 +479,7 @@ def reduce_mem_usage(df1):
     return df1
 
 
-x_train, x_valid, y_train, y_valid, list_colonnes, std_scaler, x_exp = merging_data(42)
+x_train, x_valid, y_train, y_valid, list_colonnes, std_scaler, x_exp,x,Y = merging_data(42)
 
 
 def data_balance(data, y):
@@ -491,65 +502,65 @@ def performance(y, prediction):
     print("recall score", recall_score(y, prediction, average='micro'))
     print("classification_report    \n", classification_report(y, prediction))
 
-def random_classifier(random_state, x_tr, x_val, y_tr, y_val):
-    dummy_clf = DummyClassifier(strategy="stratified", random_state=random_state).fit(x_tr, y_tr)
-    predicted = cross_val_predict(dummy_clf, x_tr, y_tr)
-    print("Performances en phase d'entrainement")
-    performance(y_tr, predicted)
-    predicted_valid = cross_val_predict(dummy_clf, x_val, y_val)
-    print("Performances en phase de test")
-    performance(y_val, predicted_valid)
-    print("Training AUC&ROC", roc_auc_score(y_tr, dummy_clf.predict_proba(x_tr)[:, 1]))
-    print("Testing AUC&ROC", roc_auc_score(y_val,  dummy_clf.predict_proba(x_val)[:, 1]))
-    return dummy_clf
-
- random_classifier(42,x_train, x_valid, y_train, y_valid)
-
-
-def random_forest_classifier(random_state, x_tr, x_val, y_tr, y_val):
-    over = SMOTE(random_state=42,sampling_strategy=0.1)
-    under = RandomUnderSampler(sampling_strategy=0.5)
-    steps = [('over', over),('under', under), ('model', RandomForestClassifier(random_state=random_state))]
-    pipe = Pipeline(steps=steps)
-    cv = KFold(n_splits=3)
-
-    # Number of trees in random forest
-    n_estimators = np.linspace(start=10, stop=80, num=10, dtype=int)
-     # Number of features to consider at every split
-    max_features = ['auto', 'sqrt']
-
-     # Maximum number of levels in tree
-    max_depth = [2, 4]
-#     # Minimum number of samples required to split a node
-    min_samples_split = [2, 5]
-#     # Minimum number of samples required at each leaf node
-    min_samples_leaf = [1, 2]
-#     # Method of selecting samples for training each tree
-    bootstrap = [True, False]
+# def random_classifier(random_state, x_tr, x_val, y_tr, y_val):
+#     dummy_clf = DummyClassifier(strategy="stratified", random_state=random_state).fit(x_tr, y_tr)
+#     predicted = cross_val_predict(dummy_clf, x_tr, y_tr)
+#     print("Performances en phase d'entrainement")
+#     performance(y_tr, predicted)
+#     predicted_valid = cross_val_predict(dummy_clf, x_val, y_val)
+#     print("Performances en phase de test")
+#     performance(y_val, predicted_valid)
+#     print("Training AUC&ROC", roc_auc_score(y_tr, dummy_clf.predict_proba(x_tr)[:, 1]))
+#     print("Testing AUC&ROC", roc_auc_score(y_val,  dummy_clf.predict_proba(x_val)[:, 1]))
+#     return dummy_clf
 #
-#     # Create the param grid
-    param_grid = {'model__n_estimators': n_estimators,
-                  'model__max_features': max_features,
-                  'model__max_depth': max_depth,
-                  'model__min_samples_split': min_samples_split,
-                  'model__min_samples_leaf': min_samples_leaf,
-                  'model__bootstrap': bootstrap
-                  }
+# random_classifier(42,x_train, x_valid, y_train, y_valid)
+#
+#
+# def random_forest_classifier(random_state, x_tr, x_val, y_tr, y_val):
+#     over = SMOTE(random_state=42,sampling_strategy=0.1)
+#     under = RandomUnderSampler(sampling_strategy=0.5)
+#     steps = [('over', over),('under', under), ('model', RandomForestClassifier(random_state=random_state))]
+#     pipe = Pipeline(steps=steps)
+#     cv = KFold(n_splits=3)
+#
+#     # Number of trees in random forest
+#     n_estimators = np.linspace(start=10, stop=80, num=10, dtype=int)
+#      # Number of features to consider at every split
+#     max_features = ['auto', 'sqrt']
+#
+#      # Maximum number of levels in tree
+#     max_depth = [2, 4]
+# #     # Minimum number of samples required to split a node
+#     min_samples_split = [2, 5]
+# #     # Minimum number of samples required at each leaf node
+#     min_samples_leaf = [1, 2]
+# #     # Method of selecting samples for training each tree
+#     bootstrap = [True, False]
+# #
+# #     # Create the param grid
+#     param_grid = {'model__n_estimators': n_estimators,
+#                   'model__max_features': max_features,
+#                   'model__max_depth': max_depth,
+#                   'model__min_samples_split': min_samples_split,
+#                   'model__min_samples_leaf': min_samples_leaf,
+#                   'model__bootstrap': bootstrap
+#                   }
+#     score = make_scorer(cost_function, greater_is_better=True)
+#     grid_cv = RandomizedSearchCV(estimator=pipe, param_distributions=param_grid, n_iter=5, cv=cv, scoring='roc_auc',
+#                                  random_state=random_state, n_jobs=-1,  verbose=True, refit=True,error_score='raise')
+#     print('cross validation')
+#     grid_cv.fit(x_tr, y_tr)
+#     best_params = grid_cv.best_params_
+#     best_model = grid_cv.best_estimator_
+#     scores= cross_validate( best_model, x_tr, y=y_tr, scoring='roc_auc', cv=5, verbose=True,  return_train_score=True, return_estimator=True)
+#     print('Train Area Under the Receiver Operating Characteristic Curve - : {:.3f} +/- {:.3f}'.format(scores['train_score'].mean(),scores['train_score'].std()))
+#     print('Validation Area Under the Receiver Operating Characteristic Curve - : {:.3f} +/- {:.3f}'.format(scores['test_score'].mean(),scores['test_score'].std()))
+#     print('Test Area Under the Receiver Operating Characteristic Curve - : {:.3f}'.format(roc_auc_score(y_val, best_model['model'].predict_proba(x_val)[:, 1])))
+#     print(best_model)
+#     return best_params, best_model
 
-    grid_cv = RandomizedSearchCV(estimator=pipe, param_distributions=param_grid, n_iter=35, cv=cv, scoring='roc_auc',
-                                 random_state=random_state, n_jobs=-1,  verbose=True, refit=True,error_score='raise')
-    print('cross validation')
-    grid_cv.fit(x_tr, y_tr)
-    best_params = grid_cv.best_params_
-    best_model = grid_cv.best_estimator_
-    scores= cross_validate( best_model, x_tr, y=y_tr, scoring='roc_auc', cv=5, verbose=True,  return_train_score=True, return_estimator=True)
-    print('Train Area Under the Receiver Operating Characteristic Curve - : {:.3f} +/- {:.3f}'.format(scores['train_score'].mean(),scores['train_score'].std()))
-    print('Validation Area Under the Receiver Operating Characteristic Curve - : {:.3f} +/- {:.3f}'.format(scores['test_score'].mean(),scores['test_score'].std()))
-    print('Test Area Under the Receiver Operating Characteristic Curve - : {:.3f}'.format(roc_auc_score(y_val, best_model['model'].predict_proba(x_val)[:, 1])))
-    print(best_model)
-    return best_params, best_model
-
-params, rf_model = random_forest_classifier(42, x_train, x_valid, y_train, y_valid)
+# params, rf_model = random_forest_classifier(42, x_train, x_valid, y_train, y_valid)
 
 
 def lightgbm_classifier(random_state, x_tr, x_val, y_tr, y_val):
@@ -570,10 +581,11 @@ def lightgbm_classifier(random_state, x_tr, x_val, y_tr, y_val):
                    'model__colsample_bytree': sp_uniform(loc=0.4, scale=0.6),
                    'model__reg_alpha': [0, 1e-1, 1, 2, 5, 7, 10, 50, 100],
                    'model__reg_lambda': [0, 1e-1, 1, 5, 10, 20, 50, 100]}
+     score = make_scorer(cost_function, greater_is_better=True)
      n_points_to_test = 100
      gs = RandomizedSearchCV(
          estimator=pipe, param_distributions=param_test,
-         n_iter=n_points_to_test,
+         n_iter=5,
          scoring='roc_auc',
          cv=cv,
          refit=True,
@@ -591,5 +603,25 @@ def lightgbm_classifier(random_state, x_tr, x_val, y_tr, y_val):
      print(best_params)
      return best_params, best_model
 
-best_params, best_model = lightgbm_classifier(42, x_train, x_valid, y_train, y_valid)
 
+def explain_model(model,data, X):
+    explainer = shap.TreeExplainer(model, output_model="probability")
+    shap_values = explainer.shap_values(data)
+    sha_values = explainer(data)
+    expected_value = explainer.expected_value
+    if isinstance(expected_value, list):
+        expected_value = expected_value[1]
+    select = range(2000)
+    features_display = data
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        shap_values = explainer.shap_values(features_display)[1]
+    shap.summary_plot(shap_values,data,feature_names=list(X.columns))
+    shap.decision_plot(expected_value, shap_values[0],data[0], feature_names=list(X.columns), ignore_warnings=True)
+    shap.initjs()
+    shap.force_plot(expected_value, shap_values[0],feature_names=list(X.columns))
+    shap.plots._waterfall.waterfall_legacy(expected_value, shap_values[0], feature_names=list(X.columns), max_display=20 )
+
+
+best_params, best_model = lightgbm_classifier(42, x_train, x_valid, y_train, y_valid)
+explain_model( best_model["model"],x_valid, x)
