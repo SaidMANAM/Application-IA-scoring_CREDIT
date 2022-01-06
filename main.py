@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 from plotly.offline import iplot
 import seaborn as sns
 from imblearn.over_sampling import SMOTE
+from sklearn import pipeline
 from collections import Counter
+import pickle
 from sklearn.dummy import DummyClassifier
 from sklearn.model_selection import RepeatedKFold, cross_val_score, train_test_split, cross_val_predict, GridSearchCV, \
     KFold, RandomizedSearchCV, cross_validate
@@ -35,9 +37,8 @@ with zipfile.ZipFile(path, "r") as zfile:
     zfile.close()
 
 
-
 # One-hot encoding for categorical columns with get_dummies
-def one_hot_encoder(data, nan_as_category=True,drop_first=True):
+def one_hot_encoder(data, nan_as_category=True, drop_first=True):
     original_columns = list(data.columns)
     cat_columns = [col for col in data.columns if data[col].dtype == 'object']
     data = pd.get_dummies(data, columns=cat_columns, dummy_na=nan_as_category, drop_first=drop_first)
@@ -78,7 +79,7 @@ def application_train_test(nan_as_category=False, drop_first=True):
 
 
 # Preprocess bureau.csv and bureau_balance.csv
-def bureau_and_balance(nan_as_category=True,drop_first=True):
+def bureau_and_balance(nan_as_category=True, drop_first=True):
     bureau = dfs['bureau']
     bb = dfs['bureau_balance']
     bb, bb_cat = one_hot_encoder(bb, nan_as_category=nan_as_category, drop_first=drop_first)
@@ -189,7 +190,7 @@ def previous_applications(nan_as_category=True, drop_first=False):
 
 
 # Preprocess POS_CASH_balance.csv
-def pos_cash(nan_as_category=True,drop_first=True):
+def pos_cash(nan_as_category=True, drop_first=True):
     pos = dfs['POS_CASH_balance']
     pos, cat_cols = one_hot_encoder(pos, nan_as_category=nan_as_category, drop_first=drop_first)
     global categorical_columns
@@ -213,7 +214,7 @@ def pos_cash(nan_as_category=True,drop_first=True):
 
 
 # Preprocess installments_payments.csv
-def installments_payments(nan_as_category=True,drop_first=True):
+def installments_payments(nan_as_category=True, drop_first=True):
     ins = dfs['installments_payments']
     ins, cat_cols = one_hot_encoder(ins, nan_as_category=nan_as_category, drop_first=drop_first)
     global categorical_columns
@@ -249,9 +250,9 @@ def installments_payments(nan_as_category=True,drop_first=True):
 
 
 # Preprocess credit_card_balance.csv
-def credit_card_balance(nan_as_category=True,drop_first=True):
+def credit_card_balance(nan_as_category=True, drop_first=True):
     cc = dfs['credit_card_balance']
-    cc, cat_cols = one_hot_encoder(cc,nan_as_category=nan_as_category, drop_first=drop_first)
+    cc, cat_cols = one_hot_encoder(cc, nan_as_category=nan_as_category, drop_first=drop_first)
     global categorical_columns
     categorical_columns = categorical_columns + list(cc.select_dtypes(include='object').columns) + cat_cols
     # General aggregations
@@ -263,13 +264,6 @@ def credit_card_balance(nan_as_category=True,drop_first=True):
     del cc
     gc.collect()
     return cc_agg
-
-
-
-
-
-
-
 
 
 # def distribution_plot(data, var, titre):
@@ -423,7 +417,10 @@ def merging_data(random_state):
     data = data.dropna()
     data = reduce_mem_usage(data)
     y = data['TARGET']
-    data = data.drop(['TARGET'], axis=1)
+    # data = data.drop(['TARGET'], axis=1)
+    data.set_index('SK_ID_CURR', inplace=True)
+    data = data.drop(columns=['TARGET', 'index'], axis=1)
+
     data.info(memory_usage='deep')
     columns = list(data.columns)
     x_tr, x_val, y_tr, y_val = train_test_split(data, y, test_size=0.2, random_state=random_state)
@@ -431,10 +428,17 @@ def merging_data(random_state):
     scaler.fit(x_tr)
     x_tr = scaler.transform(x_tr)
     x_vali = scaler.transform(x_val)
+    x_tr =x_tr.astype(np.float32)
+    y_val =y_val.astype(np.float32)
+    y_tr =y_tr.astype(np.float32)
+    x_vali = x_vali.astype(np.float32)
     print(type(x_tr))
     print(type(x_val))
     print(type(x_vali))
-    return x_tr, x_vali, y_tr, y_val, columns, scaler, x_val,data, y
+    data.to_csv(path_or_buf=r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/data_train.csv')
+    np.save(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/val', x_vali)
+    y.to_csv(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/labels.csv', index=False)
+    return x_tr, x_vali, y_tr, y_val, columns, scaler, x_val, data, y
 
 
 def mem_usage(pandas_obj):
@@ -445,12 +449,13 @@ def mem_usage(pandas_obj):
     usage_mb = usage_b / 1024 ** 2  # convertir les bytes en megabytes
     return "{:03.2f} MB".format(usage_mb)  # afficher sous format nombre (min 3 chiffres) et une précisionµ
 
+
 def cost_function(y_true, y_pred, **kwargs):
-    #pred = estimator.predict(X)
+    # pred = estimator.predict(X)
     global x
-    cost = (((y_pred == 0) & (y_true==0))*x['AMT_CREDIT'] * (0.03)
-            -((y_pred == 1) & (y_true==0))*x['AMT_CREDIT'] * (0.03)
-            -((y_pred == 0) & (y_true==1))*x['AMT_CREDIT'] * (1+0.03))
+    cost = (((y_pred == 0) & (y_true == 0)) * x['AMT_CREDIT'] * (0.03)
+            - ((y_pred == 1) & (y_true == 0)) * x['AMT_CREDIT'] * (0.03)
+            - ((y_pred == 0) & (y_true == 1)) * x['AMT_CREDIT'] * (1 + 0.03))
     return np.sum(cost)
 
 
@@ -479,7 +484,7 @@ def reduce_mem_usage(df1):
     return df1
 
 
-x_train, x_valid, y_train, y_valid, list_colonnes, std_scaler, x_exp,x,Y = merging_data(42)
+x_train, x_valid, y_train, y_valid, list_colonnes, std_scaler, x_exp, x, Y = merging_data(42)
 
 
 def data_balance(data, y):
@@ -501,6 +506,7 @@ def performance(y, prediction):
     print("precision score", precision_score(y, prediction, average='micro'))
     print("recall score", recall_score(y, prediction, average='micro'))
     print("classification_report    \n", classification_report(y, prediction))
+
 
 # def random_classifier(random_state, x_tr, x_val, y_tr, y_val):
 #     dummy_clf = DummyClassifier(strategy="stratified", random_state=random_state).fit(x_tr, y_tr)
@@ -564,51 +570,56 @@ def performance(y, prediction):
 
 
 def lightgbm_classifier(random_state, x_tr, x_val, y_tr, y_val):
-     import lightgbm as lgb
-     from scipy.stats import randint as sp_randint
-     from scipy.stats import uniform as sp_uniform
-     over = SMOTE(random_state=42,sampling_strategy=0.1)
-     under = RandomUnderSampler(sampling_strategy=0.5)
-     cv = KFold(n_splits=3)
-     balancer = SMOTE(random_state=random_state)
-     steps = [('over', over),('under', under), ('model', lgb.LGBMClassifier())]
-     pipe = Pipeline(steps=steps)
-     param_test = {'model__num_leaves': sp_randint(14, 50),
-                   'model__max_depth': sp_randint(4, 10),
-                   'model__min_child_samples': sp_randint(100, 500),
-                   'model__min_child_weight': [1e-5, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4],
-                   'model__subsample': sp_uniform(loc=0.2, scale=0.8),
-                   'model__colsample_bytree': sp_uniform(loc=0.4, scale=0.6),
-                   'model__reg_alpha': [0, 1e-1, 1, 2, 5, 7, 10, 50, 100],
-                   'model__reg_lambda': [0, 1e-1, 1, 5, 10, 20, 50, 100]}
-     score = make_scorer(cost_function, greater_is_better=True)
-     n_points_to_test = 100
-     gs = RandomizedSearchCV(
-         estimator=pipe, param_distributions=param_test,
-         n_iter=5,
-         scoring='roc_auc',
-         cv=cv,
-         refit=True,
-         random_state=random_state,
-         verbose=True,
-         n_jobs=-1)
-     print('cross validation')
-     gs.fit(x_tr, y_tr)
-     best_params =gs.best_params_
-     best_model = gs.best_estimator_
-     scores = cross_validate( best_model, x_tr, y=y_tr, scoring='roc_auc', cv=5, verbose=True,  return_train_score=True, return_estimator=True)
-     print('Train Area Under the Receiver Operating Characteristic Curve - : {:.3f} +/- {:.3f}'.format(scores['train_score'].mean(),scores['train_score'].std()))
-     print('Validation Area Under the Receiver Operating Characteristic Curve - : {:.3f} +/- {:.3f}'.format(scores['test_score'].mean(),scores['test_score'].std()))
-     print('Test Area Under the Receiver Operating Characteristic Curve - : {:.3f}'.format(roc_auc_score(y_val, best_model['model'].predict_proba(x_val)[:, 1])))
-     print(best_params)
-     return best_params, best_model
+    import lightgbm as lgb
+    from scipy.stats import randint as sp_randint
+    from scipy.stats import uniform as sp_uniform
+    over = SMOTE(random_state=42, sampling_strategy=0.1)
+    under = RandomUnderSampler(sampling_strategy=0.5)
+    cv = KFold(n_splits=3)
+    balancer = SMOTE(random_state=random_state)
+    steps = [('over', over), ('under', under), ('model', lgb.LGBMClassifier())]
+    pipe = Pipeline(steps=steps)
+    param_test = {'model__num_leaves': sp_randint(14, 50),
+                  'model__max_depth': sp_randint(4, 10),
+                  'model__min_child_samples': sp_randint(100, 500),
+                  'model__min_child_weight': [1e-5, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4],
+                  'model__subsample': sp_uniform(loc=0.2, scale=0.8),
+                  'model__colsample_bytree': sp_uniform(loc=0.4, scale=0.6),
+                  'model__reg_alpha': [0, 1e-1, 1, 2, 5, 7, 10, 50, 100],
+                  'model__reg_lambda': [0, 1e-1, 1, 5, 10, 20, 50, 100]}
+    score = make_scorer(cost_function, greater_is_better=True)
+    n_points_to_test = 100
+    gs = RandomizedSearchCV(
+        estimator=pipe, param_distributions=param_test,
+        n_iter=2,
+        scoring='roc_auc',
+        cv=cv,
+        refit=True,
+        random_state=random_state,
+        verbose=True,
+        n_jobs=-1)
+    print('cross validation')
+    gs.fit(x_tr, y_tr)
+    best_params = gs.best_params_
+    best_model = gs.best_estimator_
+    scores = cross_validate(best_model, x_tr, y=y_tr, scoring='roc_auc', cv=5, verbose=True, return_train_score=True,
+                            return_estimator=True)
+    print('Train Area Under the Receiver Operating Characteristic Curve - : {:.3f} +/- {:.3f}'.format(
+        scores['train_score'].mean(), scores['train_score'].std()))
+    print('Validation Area Under the Receiver Operating Characteristic Curve - : {:.3f} +/- {:.3f}'.format(
+        scores['test_score'].mean(), scores['test_score'].std()))
+    print('Test Area Under the Receiver Operating Characteristic Curve - : {:.3f}'.format(
+        roc_auc_score(y_val, best_model['model'].predict_proba(x_val)[:, 1])))
+    print(best_params)
+    return best_params, best_model
 
 
-def explain_model(model,data, X):
+def explain_model(ide,model,data, X):
     explainer = shap.TreeExplainer(model, output_model="probability")
     shap_values = explainer.shap_values(data)
     sha_values = explainer(data)
     expected_value = explainer.expected_value
+    idb= X.index.get_loc(ide)
     if isinstance(expected_value, list):
         expected_value = expected_value[1]
     select = range(2000)
@@ -616,12 +627,22 @@ def explain_model(model,data, X):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         shap_values = explainer.shap_values(features_display)[1]
-    shap.summary_plot(shap_values,data,feature_names=list(X.columns))
-    shap.decision_plot(expected_value, shap_values[0],data[0], feature_names=list(X.columns), ignore_warnings=True)
+    shap.summary_plot(shap_values,data,feature_names=list(X.columns), title='Graphe des variables les plus influantes sur la décision du modèle ')
+    shap.decision_plot(expected_value, shap_values[idb],data[idb], feature_names=list(X.columns), ignore_warnings=True,title='Graphe d\'explication de la décision du modèle ')
     shap.initjs()
-    shap.force_plot(expected_value, shap_values[0],feature_names=list(X.columns))
-    shap.plots._waterfall.waterfall_legacy(expected_value, shap_values[0], feature_names=list(X.columns), max_display=20 )
+    shap.force_plot(expected_value, shap_values[idb],feature_names=list(X.columns))
+    shap.plots._waterfall.waterfall_legacy(expected_value, shap_values[idb], feature_names=list(X.columns), max_display=20)
+
+
+def pipeline_trained(model, params, scaler):
+    pipeline_pred = pipeline.Pipeline([('scaler', scaler),
+                                       ('model', model(**params))])
+    pipeline_pred.fit(X, Y)
+    pickle_out = open(r'classifier.pkl', "wb")
+    pickle.dump(pipeline_pred, pickle_out)
+    pickle_out.close()
+    return "model entrainé et serialisé"
 
 
 best_params, best_model = lightgbm_classifier(42, x_train, x_valid, y_train, y_valid)
-explain_model( best_model["model"],x_valid, x)
+#explain_model(10004,best_model["model"], x_valid, x)
