@@ -27,6 +27,8 @@ def chargement_data(path1, path2, path3, path4):
     x_valid = np.load(path2)
     labels = pd.read_csv(path3, dtype=np.float32)
     validation = pd.read_csv(path4, dtype=np.float32)
+    if validation.shape[-1] == 770:
+        validation.set_index('SK_ID_CURR', inplace=True)
     return dataframe, x_valid, labels, validation
 
 
@@ -37,27 +39,29 @@ def chargement_model(path):
     return loaded_model
 
 
-def neighbor_model(x, y, id):
-    if 'labels' in x.columns:
-        x.drop(columns=['labels'], inplace=True)
-    #x.set_index('SK_ID_CURR', inplace=True)
-    pipeline_neighbors = sklearn.pipeline.Pipeline([('scaler', sklearn.preprocessing.StandardScaler()),
-                                                    ('knn', sklearn.neighbors.KNeighborsClassifier(n_neighbors=5,
-                                                                                                   algorithm='kd_tree'))])
-    x_train, x_valid, y_train, y_valid = sklearn.model_selection.train_test_split(x, y, test_size=0.2, random_state=42)
-    pipeline_neighbors.fit(x_train, y_train)
-    nbrs = pipeline_neighbors['knn'].kneighbors(np.array(x_valid.loc[int(id)]).reshape(1, -1), return_distance=False)
-    a = pd.DataFrame(x_valid.loc[int(id)]).transpose()[
-        ['DAYS_EMPLOYED_PERC', 'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL', 'AMT_CREDIT']]
-    a=a.append(x_train.iloc[list(nbrs[0])][
-                ['DAYS_EMPLOYED_PERC', 'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL',
-                 'AMT_CREDIT']])
-    st.dataframe(a)
+# def neighbor_model(x, y, id):
+#     if 'labels' in x.columns:
+#         x.drop(columns=['labels'], inplace=True)
+#     if x.shape[-1] == 770:
+#         x.set_index('SK_ID_CURR', inplace=True)
+#     #x.set_index('SK_ID_CURR', inplace=True)
+#     pipeline_neighbors = sklearn.pipeline.Pipeline([('scaler', sklearn.preprocessing.StandardScaler()),
+#                                                     ('knn', sklearn.neighbors.KNeighborsClassifier(n_neighbors=5,
+#                                                                                                    algorithm='kd_tree'))])
+#     x_train, x_valid, y_train, y_valid = sklearn.model_selection.train_test_split(x, y, test_size=0.2, random_state=42)
+#     pipeline_neighbors.fit(x_train, y_train)
+#     nbrs = pipeline_neighbors['knn'].kneighbors(np.array(x_valid.loc[int(id)]).reshape(1, -1), return_distance=False)
+#     a = pd.DataFrame(x_valid.loc[int(id)]).transpose()[
+#         ['DAYS_EMPLOYED_PERC', 'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL', 'AMT_CREDIT']]
+#     a=a.append(x_train.iloc[list(nbrs[0])][
+#                 ['DAYS_EMPLOYED_PERC', 'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL',
+#                  'AMT_CREDIT']])
+#     st.dataframe(a)
 
 
 # @st.cache  # mise en cache de la fonction pour exécution unique
 # def chargement_explanation(id, data, model, validation):
-#     return explain_model(id, model, validation, data)
+# return explain_model(id, model, validation, data)
 
 def st_shap(plot, height=None):
     shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
@@ -70,13 +74,10 @@ def explain_model(ide, model, data, X):
     if X.shape[-1] == 770:
         X.set_index('SK_ID_CURR', inplace=True)
     explainer = shap.TreeExplainer(model, output_model="probability")
-    shap_values = explainer.shap_values(data)
-    sha_values = explainer(data)
     expected_value = explainer.expected_value
     idb = X.index.get_loc(float(ide))
     if isinstance(expected_value, list):
         expected_value = expected_value[1]
-    select = range(2000)
     features_display = data
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -112,6 +113,7 @@ st.set_page_config(page_title="Said's Dashboard",
                    initial_sidebar_state="expanded")
 
 dataframe, valid, labels, validation = chargement_data(path_data, path_valid, path_labels, path_validation)
+
 liste_id = validation.index.tolist()
 id_input = st.text_input('Veuillez saisir l\'identifiant du client:', )
 dataframe['labels'] = labels.values
@@ -121,6 +123,7 @@ dataframe['labels'] = labels.values
 #     list(dataframe[dataframe['labels'] == 0].sample(5)[['SK_ID_CURR', 'labels']]['SK_ID_CURR'].values)).replace('\'',
 #                                                                                                                 '').replace(
 #     '[', '').replace(']', '')
+# sample_en_regle=str(list((labels[246008:]==0).sample(5).index)).replace('[', '').replace(']', '')
 # chaine_en_regle = 'Exemples d\'id de clients en règle : ' + sample_en_regle
 # sample_en_defaut = str(
 #     list(dataframe[dataframe['labels'] == 1].sample(5)[['SK_ID_CURR', 'labels']]['SK_ID_CURR'].values)).replace('\'',
@@ -133,11 +136,11 @@ st.title('Dashbord  Scoring Credit Model')
 st.subheader("Prédictions de scoring du client")
 
 if id_input == '':  # rien n'a été saisi
-    #st.write(chaine_en_defaut)
-    #st.write(chaine_en_regle)
-    st.write('Aucuni  n\'a été saisi')
+    # st.write(chaine_en_defaut)
+    # st.write(chaine_en_regle)
+    st.write('Aucun ID  n\'a été saisi')
 
-#elif (int(id_input) in liste_id):  # quand un identifiant correct a été saisi on appelle l'API
+# elif (int(id_input) in liste_id):  # quand un identifiant correct a été saisi on appelle l'API
 elif (float(id_input) in liste_id):
     # Appel de l'API :
 
@@ -157,20 +160,20 @@ elif (float(id_input) in liste_id):
             etat = 'client peu risqué'
         proba = 1 - results['proba_remboureser']
         prediction = results['prediction']
-        # classe_reelle = dataframe[dataframe['SK_ID_CURR'] == int(id_input)]['labels'].values[0]
-        # classe_reelle = str(classe_reelle).replace('0', 'sans défaut').replace('1', 'avec défaut')
-        # chaine = 'Prédiction : **' + etat + '** avec **' + str(
-        #     round(proba * 100)) + '%** de risque de défaut (classe réelle :   ' + str(classe_reelle) + ')'
+        classe_reelle = dataframe.loc[int(id_input)]['labels']
+        classe_reelle = str(classe_reelle).replace('0', 'sans défaut').replace('1', 'avec défaut')
+        chaine = 'Prédiction : **' + etat + '** avec **' + str(
+            round(proba * 100)) + '%** de rembourser (classe réelle :   ' + str(classe_reelle) + ')'
 
-    #st.markdown(chaine)
+    st.markdown(chaine)
     st.title("Explicabilité du modèle")
 
     explain_model(id_input, model['model'], valid, validation)
     st.title("Les clients ayant des caractéristiques des proches du demandeur:")
-    neighbor_model(dataframe, labels, id_input)
+    # neighbor_model(dataframe, labels, id_input)
     # # affichage de l'explication du score
     # with st.spinner('Chargement des détails de la prédiction...'):
-    #     chargement_explanation(id_input, dataframe, model['model'], valid)
+    # chargement_explanation(id_input, dataframe, model['model'], valid)
     columns1 = ['DAYS_EMPLOYED_PERC', 'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL', 'AMT_CREDIT']
     columns2 = ['DAYS_EMPLOYED_PERC', 'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL', 'AMT_CREDIT']
     columns3 = ['DAYS_EMPLOYED_PERC', 'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL', 'AMT_CREDIT']
@@ -178,17 +181,29 @@ elif (float(id_input) in liste_id):
     feature2 = st.selectbox('La liste des features2', columns2)
     feature3 = st.selectbox('La liste des features3', columns3)
     fig, ax = plt.subplots(nrows=1, ncols=1)
-    plt.scatter(validation[feature1],validation[feature2])
-    plt.scatter(validation.loc[float(id_input)][feature1],validation.loc[float(id_input)][feature2], color="yellow")
-    plt.title('Graphique scatter plot des variables: ' + feature1+' et '+feature2)
+    plt.scatter(validation[feature1], validation[feature2])
+    plt.scatter(validation.loc[float(id_input)][feature1], validation.loc[float(id_input)][feature2], color="yellow")
+    plt.title('Graphique scatter plot des variables: ' + feature1 + ' et ' + feature2)
     st.pyplot(fig)
     fig, ax = plt.subplots(nrows=1, ncols=1)
     plt.hist(validation[feature3])
-    plt.axvline(x=validation.loc[float(id_input)][feature3],color="k")
-    plt.title('Histogramme de la variable: '+feature3)
+    plt.axvline(x=validation.loc[float(id_input)][feature3], color="k")
+    plt.title('Histogramme de la variable: ' + feature3)
     st.pyplot(fig)
-
-
+    threshold = results['treshold']
+    fig, ax = plt.subplots()
+    if proba < threshold:
+        color = 'r'
+    else:
+        color = 'g'
+    ax.bar('prediction', height=proba, width=0.5, color=color)
+    # ax.bar('prediction', height=np.minimum(threshold, proba), width=0.5, color="b")
+    # ax.bar('prediction', height=abs(proba - threshold), width=0.5, color="pink",
+    # bottom=np.minimum(threshold, proba))
+    plt.axhline(y=threshold, linewidth=0.5, color='k')
+    plt.ylim([0, 1])
+    ax.text(0, threshold + 0.1, str(threshold))
+    st.pyplot(fig)
 if __name__ == "__main__":
 
     print("Script runned directly")
