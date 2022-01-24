@@ -8,22 +8,23 @@ import ast
 import warnings
 import streamlit.components.v1 as components
 import matplotlib.pyplot as plt
-import sklearn
-# from main import explain_model
+import os
 import pickle
 import shap
 
-path_data = 'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/data_train.csv'
+path_data = os.getcwd() +'/data_train.csv'
 # df reduced : 10 % du jeu de donnees initial
-path_valid = 'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/val.npy'
-path_labels = 'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/labels.csv'
-path_model = 'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/classifier.pkl'
-path_validation = 'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/valid.csv'
+path_valid = os.getcwd() +'/val.npy'
+path_labels = os.getcwd() +'/labels.csv'
+path_model = os.getcwd() +'/classifier.pkl'
+path_validation = os.getcwd() +'/valid.csv'
 
 
 @st.cache(allow_output_mutation=True)  # mise en cache de la fonction pour exécution unique
 def chargement_data(path1, path2, path3, path4):
     dataframe = pd.read_csv(path1, dtype=np.float32)
+    if dataframe.shape[-1] == 770:
+        dataframe.set_index('SK_ID_CURR', inplace=True)
     x_valid = np.load(path2)
     labels = pd.read_csv(path3, dtype=np.float32)
     validation = pd.read_csv(path4, dtype=np.float32)
@@ -59,9 +60,7 @@ def chargement_model(path):
 #     st.dataframe(a)
 
 
-# @st.cache  # mise en cache de la fonction pour exécution unique
-# def chargement_explanation(id, data, model, validation):
-# return explain_model(id, model, validation, data)
+
 
 def st_shap(plot, height=None):
     shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
@@ -75,6 +74,7 @@ def explain_model(ide, model, data, X):
         X.set_index('SK_ID_CURR', inplace=True)
     explainer = shap.TreeExplainer(model, output_model="probability")
     expected_value = explainer.expected_value
+    shap_values = explainer.shap_values(data)
     idb = X.index.get_loc(float(ide))
     if isinstance(expected_value, list):
         expected_value = expected_value[1]
@@ -102,10 +102,6 @@ def explain_model(ide, model, data, X):
                        ignore_warnings=True, title='Graphe d\'explication de la décision du modèle ')
     st.pyplot(fig)
     st.subheader('Waterfall Plot')
-    fig, ax = plt.subplots(nrows=1, ncols=1)
-    shap.plots._waterfall.waterfall_legacy(expected_value, shap_values[idb], feature_names=list(X.columns),
-                                           max_display=20)
-    st.pyplot(fig)
 
 
 st.set_page_config(page_title="Said's Dashboard",
@@ -169,27 +165,12 @@ elif (float(id_input) in liste_id):
     st.title("Explicabilité du modèle")
 
     explain_model(id_input, model['model'], valid, validation)
+
     st.title("Les clients ayant des caractéristiques des proches du demandeur:")
     # neighbor_model(dataframe, labels, id_input)
     # # affichage de l'explication du score
     # with st.spinner('Chargement des détails de la prédiction...'):
     # chargement_explanation(id_input, dataframe, model['model'], valid)
-    columns1 = ['DAYS_EMPLOYED_PERC', 'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL', 'AMT_CREDIT']
-    columns2 = ['DAYS_EMPLOYED_PERC', 'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL', 'AMT_CREDIT']
-    columns3 = ['DAYS_EMPLOYED_PERC', 'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL', 'AMT_CREDIT']
-    feature1 = st.selectbox('La liste des features', columns1)
-    feature2 = st.selectbox('La liste des features2', columns2)
-    feature3 = st.selectbox('La liste des features3', columns3)
-    fig, ax = plt.subplots(nrows=1, ncols=1)
-    plt.scatter(validation[feature1], validation[feature2])
-    plt.scatter(validation.loc[float(id_input)][feature1], validation.loc[float(id_input)][feature2], color="yellow")
-    plt.title('Graphique scatter plot des variables: ' + feature1 + ' et ' + feature2)
-    st.pyplot(fig)
-    fig, ax = plt.subplots(nrows=1, ncols=1)
-    plt.hist(validation[feature3])
-    plt.axvline(x=validation.loc[float(id_input)][feature3], color="k")
-    plt.title('Histogramme de la variable: ' + feature3)
-    st.pyplot(fig)
     threshold = results['treshold']
     fig, ax = plt.subplots()
     if proba < threshold:
@@ -197,6 +178,7 @@ elif (float(id_input) in liste_id):
     else:
         color = 'g'
     ax.bar('prediction', height=proba, width=0.5, color=color)
+    plt.title('Niveau de la confiance du remboursement de pret')
     # ax.bar('prediction', height=np.minimum(threshold, proba), width=0.5, color="b")
     # ax.bar('prediction', height=abs(proba - threshold), width=0.5, color="pink",
     # bottom=np.minimum(threshold, proba))
@@ -204,6 +186,35 @@ elif (float(id_input) in liste_id):
     plt.ylim([0, 1])
     ax.text(0, threshold + 0.1, str(threshold))
     st.pyplot(fig)
+
+    columns1 = ['', 'EXT_SOURCE_3', 'EXT_SOURCE_2', 'EXT_SOURCE_1', 'PAYMENT_RATE', 'DAYS_EMPLOYED',
+                'CONSUMER_GOODS_RATIO',
+                'AMT_ANNUITY', 'DAYS_BIRTH', 'AMT_GOODS_PRICE', 'AMT_INCOME_TOTAL', 'AMT_CREDIT', 'ANNUITY_INCOME_PERC']
+    feature1 = st.selectbox('La liste des features', columns1)
+    feature2 = st.selectbox('La liste des features2', columns1)
+
+    if feature1 != '':
+        fig, ax = plt.subplots(nrows=1, ncols=1)
+        plt.hist(validation[feature1])
+        plt.axvline(x=validation.loc[float(id_input)][feature1], color="k")
+        plt.title('Histogramme de la variable: ' + feature1)
+        st.pyplot(fig)
+    if feature2 != '':
+        fig, ax = plt.subplots(nrows=1, ncols=1)
+        plt.hist(validation[feature2])
+        plt.axvline(x=validation.loc[float(id_input)][feature2], color="k")
+        plt.title('Histogramme de la variable: ' + feature2)
+        st.pyplot(fig)
+    if feature2 != '' and feature1 != '':
+        fig, ax = plt.subplots(nrows=1, ncols=1)
+        plt.scatter(validation[feature1], validation[feature2])
+        plt.scatter(validation.loc[float(id_input)][feature1], validation.loc[float(id_input)][feature2],
+                    color="yellow")
+        plt.xlabel(feature1)
+        plt.ylabel(feature2)
+        plt.title('Graphique scatter plot des variables: ' + feature1 + ' et ' + feature2)
+        st.pyplot(fig)
+
 if __name__ == "__main__":
 
     print("Script runned directly")
