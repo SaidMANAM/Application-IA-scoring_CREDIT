@@ -11,26 +11,45 @@ import matplotlib.pyplot as plt
 import os
 import pickle
 import shap
+from Preprocessing import prepare_data
 
-path_data = os.getcwd() +'/data_train.csv'
+path_data = r'C:\Users\Utilisateur\OneDrive\Bureau\PROJET7\data_tain.pkl'
+# path_data = os.getcwd() +'/data_train.csv'
 # df reduced : 10 % du jeu de donnees initial
-path_valid = os.getcwd() +'/val.npy'
-path_labels = os.getcwd() +'/labels.csv'
-path_model = os.getcwd() +'/classifier.pkl'
-path_validation = os.getcwd() +'/valid.csv'
+path_valid = os.getcwd() + '/val.npy'
+path_labels = os.getcwd() + '/y_valid.csv'
+path_model = os.getcwd() + '/classifier.pkl'
+path_validation = os.getcwd() + '/x_valid.csv'
+#path = "https://s3-eu-west-1.amazonaws.com/static.oc-static.com/prod/courses/files/Parcours_data_scientist/Projet+-+Impl%C3%A9menter+un+mod%C3%A8le+de+scoring/Projet+Mise+en+prod+-+home-credit-default-risk.zip"
 
 
+# @st.cache(allow_output_mutation=True)  # mise en cache de la fonction pour exécution unique
+# def chargement_data(path1):
+#     url = urllib.request.urlopen(path1)
+#     with zipfile.ZipFile(BytesIO(url.read())) as zfile:
+#         dfs = {name[:-4]: pd.read_csv(zfile.open(name), encoding='cp1252')
+#                for name in zfile.namelist()
+#                }
+#         zfile.close()
+#     data, y = merging_data()
+# @st.cache(allow_output_mutation=True)  # mise en cache de la fonction pour exécution unique
+# def chargement_data(random_state):
+#     return  prepare_data(random_state)
 @st.cache(allow_output_mutation=True)  # mise en cache de la fonction pour exécution unique
-def chargement_data(path1, path2, path3, path4):
-    dataframe = pd.read_csv(path1, dtype=np.float32)
-    if dataframe.shape[-1] == 770:
-        dataframe.set_index('SK_ID_CURR', inplace=True)
-    x_valid = np.load(path2)
+#def chargement_data(path1, path2, path3, path4):
+def chargement_data( path2, path3, path4):
+    # dataframe = pd.read_csv(path1, dtype=np.float32)
+    # with open(path1, 'rb') as f:
+    #     dataframe = pickle.load(f)
+    # if dataframe.shape[-1] == 770:
+    #     dataframe.set_index('SK_ID_CURR', inplace=True)
+    valid_np = np.load(path2)
     labels = pd.read_csv(path3, dtype=np.float32)
-    validation = pd.read_csv(path4, dtype=np.float32)
-    if validation.shape[-1] == 770:
-        validation.set_index('SK_ID_CURR', inplace=True)
-    return dataframe, x_valid, labels, validation
+    x_validation = pd.read_csv(path4, dtype=np.float32)
+    if x_validation.shape[-1] == 770:
+        x_validation.set_index('SK_ID_CURR', inplace=True)
+    #return dataframe, valid_np, labels, x_validation
+    return valid_np, labels, x_validation
 
 
 @st.cache  # mise en cache de la fonction pour exécution unique
@@ -60,8 +79,6 @@ def chargement_model(path):
 #     st.dataframe(a)
 
 
-
-
 def st_shap(plot, height=None):
     shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
     components.html(shap_html, height=height)
@@ -74,7 +91,6 @@ def explain_model(ide, model, data, X):
         X.set_index('SK_ID_CURR', inplace=True)
     explainer = shap.TreeExplainer(model, output_model="probability")
     expected_value = explainer.expected_value
-    shap_values = explainer.shap_values(data)
     idb = X.index.get_loc(float(ide))
     if isinstance(expected_value, list):
         expected_value = expected_value[1]
@@ -108,11 +124,12 @@ st.set_page_config(page_title="Said's Dashboard",
                    page_icon="☮",
                    initial_sidebar_state="expanded")
 
-dataframe, valid, labels, validation = chargement_data(path_data, path_valid, path_labels, path_validation)
+#dataframe, valid, labels, validation = chargement_data(path_data, path_valid, path_labels, path_validation)
 
-liste_id = validation.index.tolist()
+valid, labels, x_validation = chargement_data( path_valid, path_labels, path_validation)
+liste_id = x_validation.index.tolist()
 id_input = st.text_input('Veuillez saisir l\'identifiant du client:', )
-dataframe['labels'] = labels.values
+x_validation['labels'] = labels.values
 
 # requests.post('http://127.0.0.1:80/credit', data={'id': id_input})
 # sample_en_regle = str(
@@ -156,7 +173,7 @@ elif (float(id_input) in liste_id):
             etat = 'client peu risqué'
         proba = 1 - results['proba_remboureser']
         prediction = results['prediction']
-        classe_reelle = dataframe.loc[int(id_input)]['labels']
+        classe_reelle = x_validation.loc[int(id_input)]['labels']
         classe_reelle = str(classe_reelle).replace('0', 'sans défaut').replace('1', 'avec défaut')
         chaine = 'Prédiction : **' + etat + '** avec **' + str(
             round(proba * 100)) + '%** de rembourser (classe réelle :   ' + str(classe_reelle) + ')'
@@ -164,7 +181,7 @@ elif (float(id_input) in liste_id):
     st.markdown(chaine)
     st.title("Explicabilité du modèle")
 
-    explain_model(id_input, model['model'], valid, validation)
+    explain_model(id_input, model['model'], valid, x_validation)
 
     st.title("Les clients ayant des caractéristiques des proches du demandeur:")
     # neighbor_model(dataframe, labels, id_input)
@@ -195,20 +212,20 @@ elif (float(id_input) in liste_id):
 
     if feature1 != '':
         fig, ax = plt.subplots(nrows=1, ncols=1)
-        plt.hist(validation[feature1])
-        plt.axvline(x=validation.loc[float(id_input)][feature1], color="k")
+        plt.hist(x_validation[feature1])
+        plt.axvline(x=x_validation.loc[float(id_input)][feature1], color="k")
         plt.title('Histogramme de la variable: ' + feature1)
         st.pyplot(fig)
     if feature2 != '':
         fig, ax = plt.subplots(nrows=1, ncols=1)
-        plt.hist(validation[feature2])
-        plt.axvline(x=validation.loc[float(id_input)][feature2], color="k")
+        plt.hist(x_validation[feature2])
+        plt.axvline(x=x_validation.loc[float(id_input)][feature2], color="k")
         plt.title('Histogramme de la variable: ' + feature2)
         st.pyplot(fig)
     if feature2 != '' and feature1 != '':
         fig, ax = plt.subplots(nrows=1, ncols=1)
-        plt.scatter(validation[feature1], validation[feature2])
-        plt.scatter(validation.loc[float(id_input)][feature1], validation.loc[float(id_input)][feature2],
+        plt.scatter(x_validation[feature1], x_validation[feature2])
+        plt.scatter(x_validation.loc[float(id_input)][feature1], x_validation.loc[float(id_input)][feature2],
                     color="yellow")
         plt.xlabel(feature1)
         plt.ylabel(feature2)
