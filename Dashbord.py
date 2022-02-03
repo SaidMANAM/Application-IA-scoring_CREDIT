@@ -37,7 +37,7 @@ path_validation = os.getcwd() + '/x_valid.csv'
 #     return  prepare_data(random_state)
 @st.cache(allow_output_mutation=True)  # mise en cache de la fonction pour exécution unique
 #def chargement_data(path1, path2, path3, path4):
-def chargement_data(  path3, path4,path):
+def chargement_data(path3, path4,path):
 
     # dataframe = pd.read_csv(path1, dtype=np.float32)
     # with open(path1, 'rb') as f:
@@ -121,7 +121,7 @@ def explain_model(ide, model, data, X):
     shap.decision_plot(expected_value, shap_values[idb], data[idb], feature_names=list(X.columns),
                        ignore_warnings=True, title='Graphe d\'explication de la décision du modèle ')
     st.pyplot(fig)
-    st.subheader('Waterfall Plot')
+
 
 
 st.set_page_config(page_title="Said's Dashboard",
@@ -162,27 +162,27 @@ elif (float(id_input) in liste_id):
     # Appel de l'API :
 
     API_url = "http://127.0.0.1:80/credit/" + str(id_input)
-    with st.spinner('Chargement du score du client...'):
-        print(API_url)
-        json_url = urlopen(API_url)
-        print(json_url)
-        API_data = json.loads(json_url.read())
-        print(type(ast.literal_eval(API_data)))
-        results = ast.literal_eval(API_data)
-        classe_predite = results['prediction']
-        print(classe_predite)
-        if classe_predite == 1:
-            etat = 'client à risque'
-        else:
-            etat = 'client peu risqué'
-        proba = 1 - results['proba_remboureser']
-        prediction = results['prediction']
-        classe_reelle = x_validation.loc[int(id_input)]['labels']
-        classe_reelle = str(classe_reelle).replace('0', 'sans défaut').replace('1', 'avec défaut')
-        chaine = 'Prédiction : **' + etat + '** avec **' + str(
-            round(proba * 100)) + '%** de rembourser (classe réelle :   ' + str(classe_reelle) + ')'
+    #with st.spinner('Chargement du score du client...'):
+        #print(API_url)
+        #json_url = urlopen(API_url)
+        #print(json_url)
+        #API_data = json.loads(json_url.read())
+        #print(type(ast.literal_eval(API_data)))
+        #results = ast.literal_eval(API_data)
+        #classe_predite = results['prediction']
+        #print(classe_predite)
+        #if classe_predite == 1:
+            #etat = 'client à risque'
+        #else:
+            #etat = 'client peu risqué'
+        #proba = 1 - results['proba_remboureser']
+        #prediction = results['prediction']
+        #classe_reelle = x_validation.loc[int(id_input)]['labels']
+        #classe_reelle = str(classe_reelle).replace('0', 'sans défaut').replace('1', 'avec défaut')
+        #chaine = 'Prédiction : **' + etat + '** avec **' + str(
+            #round(proba * 100)) + '%** de rembourser (classe réelle :   ' + str(classe_reelle) + ')'
 
-    st.markdown(chaine)
+    #st.markdown(chaine)
     st.title("Explicabilité du modèle")
 
     explain_model(id_input, model['model'], valid_np, x_validation)
@@ -192,21 +192,21 @@ elif (float(id_input) in liste_id):
     # # affichage de l'explication du score
     # with st.spinner('Chargement des détails de la prédiction...'):
     # chargement_explanation(id_input, dataframe, model['model'], valid)
-    threshold = results['treshold']
-    fig, ax = plt.subplots()
-    if proba < threshold:
-        color = 'r'
-    else:
-        color = 'g'
-    ax.bar('prediction', height=proba, width=0.5, color=color)
-    plt.title('Niveau de la confiance du remboursement de pret')
-    # ax.bar('prediction', height=np.minimum(threshold, proba), width=0.5, color="b")
-    # ax.bar('prediction', height=abs(proba - threshold), width=0.5, color="pink",
-    # bottom=np.minimum(threshold, proba))
-    plt.axhline(y=threshold, linewidth=0.5, color='k')
-    plt.ylim([0, 1])
-    ax.text(0, threshold + 0.1, str(threshold))
-    st.pyplot(fig)
+    # threshold = results['treshold']
+    # fig, ax = plt.subplots()
+    # if proba < threshold:
+    #     color = 'r'
+    # else:
+    #     color = 'g'
+    # ax.bar('prediction', height=proba, width=0.5, color=color)
+    # plt.title('Niveau de la confiance du remboursement de pret')
+    # # ax.bar('prediction', height=np.minimum(threshold, proba), width=0.5, color="b")
+    # # ax.bar('prediction', height=abs(proba - threshold), width=0.5, color="pink",
+    # # bottom=np.minimum(threshold, proba))
+    # plt.axhline(y=threshold, linewidth=0.5, color='k')
+    # plt.ylim([0, 1])
+    # ax.text(0, threshold + 0.1, str(threshold))
+    # st.pyplot(fig)
 
     columns1 = ['', 'EXT_SOURCE_3', 'EXT_SOURCE_2', 'EXT_SOURCE_1', 'PAYMENT_RATE', 'DAYS_EMPLOYED',
                 'CONSUMER_GOODS_RATIO',
