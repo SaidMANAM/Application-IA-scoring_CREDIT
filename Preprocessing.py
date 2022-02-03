@@ -319,8 +319,8 @@ def prepare_data(random_state):
     data.info(memory_usage='deep')
     columns = list(data.columns)
     x_tr, x_val, y_tr, y_val = train_test_split(data, y, test_size=0.2, random_state=random_state)
-    y_val.to_csv(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/y_valid.csv', index=False)
-    x_val.to_csv(path_or_buf=r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/x_valid.csv')
+    y_val.sample(frac=0.1,random_state=42).to_csv(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/y_valid.csv', index=False)
+    x_val.sample(frac=0.1,random_state=42).to_csv(path_or_buf=r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/x_valid.csv')
     scaler = StandardScaler()
     scaler.fit(x_tr)
     x_tr = scaler.transform(x_tr)
@@ -329,11 +329,12 @@ def prepare_data(random_state):
     y_val =y_val.astype(np.float32)
     y_tr =y_tr.astype(np.float32)
     x_vali = x_vali.astype(np.float32)
-    data.to_csv(path_or_buf=r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/data_train.csv')
-    data.to_pickle(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/data_tain.pkl')
-    np.save(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/val', x_vali)
-    np.save(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/yvalid', y_val)
-    y_val.to_csv(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/y_valid.csv', index=False)
+    x_val_dash=scaler.transform(x_val.sample(frac=0.1, random_state=42))
+    #data.to_csv(path_or_buf=r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/data_train.csv')
+    #data.to_pickle(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/data_tain.pkl')
+    np.save(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/val', x_val_dash)
+    #np.save(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/yvalid', y_val)
+    #y_val.to_csv(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/y_valid.csv', index=False)
     return x_tr, x_vali, y_tr, y_val, columns, scaler, x_val, data, y
 
 

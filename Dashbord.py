@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import os
 import pickle
 import shap
-from Preprocessing import prepare_data
+
 
 path_data = r'C:\Users\Utilisateur\OneDrive\Bureau\PROJET7\data_tain.pkl'
 # path_data = os.getcwd() +'/data_train.csv'
@@ -37,19 +37,20 @@ path_validation = os.getcwd() + '/x_valid.csv'
 #     return  prepare_data(random_state)
 @st.cache(allow_output_mutation=True)  # mise en cache de la fonction pour exécution unique
 #def chargement_data(path1, path2, path3, path4):
-def chargement_data( path2, path3, path4):
+def chargement_data(  path3, path4):
+
     # dataframe = pd.read_csv(path1, dtype=np.float32)
     # with open(path1, 'rb') as f:
     #     dataframe = pickle.load(f)
     # if dataframe.shape[-1] == 770:
     #     dataframe.set_index('SK_ID_CURR', inplace=True)
-    valid_np = np.load(path2)
+    #valid_np = np.load(path2)
     labels = pd.read_csv(path3, dtype=np.float32)
     x_validation = pd.read_csv(path4, dtype=np.float32)
     if x_validation.shape[-1] == 770:
         x_validation.set_index('SK_ID_CURR', inplace=True)
     #return dataframe, valid_np, labels, x_validation
-    return valid_np, labels, x_validation
+    return labels, x_validation
 
 
 @st.cache  # mise en cache de la fonction pour exécution unique
@@ -126,7 +127,11 @@ st.set_page_config(page_title="Said's Dashboard",
 
 #dataframe, valid, labels, validation = chargement_data(path_data, path_valid, path_labels, path_validation)
 
-valid, labels, x_validation = chargement_data( path_valid, path_labels, path_validation)
+labels, x_validation = chargement_data(path_labels, path_validation)
+model = chargement_model(path_model)
+if x_validation.shape[-1] == 770:
+    x_validation.set_index('SK_ID_CURR', inplace=True)
+valid_np=model['scaler'].transform(x_validation)
 liste_id = x_validation.index.tolist()
 id_input = st.text_input('Veuillez saisir l\'identifiant du client:', )
 x_validation['labels'] = labels.values
@@ -143,7 +148,7 @@ x_validation['labels'] = labels.values
 #                                                                                                                 '').replace(
 #     '[', '').replace(']', '')
 # chaine_en_defaut = 'Exemples d\'id de clients en défaut : ' + sample_en_defaut
-model = chargement_model(path_model)
+
 
 st.title('Dashbord  Scoring Credit Model')
 st.subheader("Prédictions de scoring du client")
@@ -181,7 +186,7 @@ elif (float(id_input) in liste_id):
     st.markdown(chaine)
     st.title("Explicabilité du modèle")
 
-    explain_model(id_input, model['model'], valid, x_validation)
+    explain_model(id_input, model['model'], valid_np, x_validation)
 
     st.title("Les clients ayant des caractéristiques des proches du demandeur:")
     # neighbor_model(dataframe, labels, id_input)
