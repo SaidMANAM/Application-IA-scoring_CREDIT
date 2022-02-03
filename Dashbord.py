@@ -37,7 +37,7 @@ path_validation = os.getcwd() + '/x_valid.csv'
 #     return  prepare_data(random_state)
 @st.cache(allow_output_mutation=True)  # mise en cache de la fonction pour exécution unique
 #def chargement_data(path1, path2, path3, path4):
-def chargement_data(  path3, path4):
+def chargement_data(  path3, path4,path):
 
     # dataframe = pd.read_csv(path1, dtype=np.float32)
     # with open(path1, 'rb') as f:
@@ -45,19 +45,22 @@ def chargement_data(  path3, path4):
     # if dataframe.shape[-1] == 770:
     #     dataframe.set_index('SK_ID_CURR', inplace=True)
     #valid_np = np.load(path2)
+    with open(path, 'rb') as f:
+        loaded_model = pickle.load(f)
     labels = pd.read_csv(path3, dtype=np.float32)
     x_validation = pd.read_csv(path4, dtype=np.float32)
     if x_validation.shape[-1] == 770:
         x_validation.set_index('SK_ID_CURR', inplace=True)
+    validation_np=loaded_model['scaler'].transform(x_validation)
     #return dataframe, valid_np, labels, x_validation
-    return labels, x_validation
+    return labels, x_validation,loaded_model,validation_np
 
 
-@st.cache  # mise en cache de la fonction pour exécution unique
-def chargement_model(path):
-    with open(path, 'rb') as f:
-        loaded_model = pickle.load(f)
-    return loaded_model
+# @st.cache  # mise en cache de la fonction pour exécution unique
+# def chargement_model(path):
+#     with open(path, 'rb') as f:
+#         loaded_model = pickle.load(f)
+#     return loaded_model
 
 
 # def neighbor_model(x, y, id):
@@ -127,15 +130,11 @@ st.set_page_config(page_title="Said's Dashboard",
 
 #dataframe, valid, labels, validation = chargement_data(path_data, path_valid, path_labels, path_validation)
 
-labels, x_validation = chargement_data(path_labels, path_validation)
-model = chargement_model(path_model)
-if x_validation.shape[-1] == 770:
-    x_validation.set_index('SK_ID_CURR', inplace=True)
-valid_np=model['scaler'].transform(x_validation)
+labels, x_validation,model,valid_np = chargement_data(path_labels, path_validation,path_model)
 liste_id = x_validation.index.tolist()
 id_input = st.text_input('Veuillez saisir l\'identifiant du client:', )
 x_validation['labels'] = labels.values
-
+st.write(x_validation.shape)
 # requests.post('http://127.0.0.1:80/credit', data={'id': id_input})
 # sample_en_regle = str(
 #     list(dataframe[dataframe['labels'] == 0].sample(5)[['SK_ID_CURR', 'labels']]['SK_ID_CURR'].values)).replace('\'',
