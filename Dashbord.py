@@ -47,7 +47,7 @@ def chargement_data(path3, path4,path):
     #valid_np = np.load(path2)
     with open(path, 'rb') as f:
         loaded_model = pickle.load(f)
-    labels = pd.read_csv(path3, dtype=np.float32)
+    labels = pd.read_csv(path3, index_col=[0])
     x_validation = pd.read_csv(path4, dtype=np.float32)
     if x_validation.shape[-1] == 770:
         x_validation.set_index('SK_ID_CURR', inplace=True)
@@ -134,27 +134,18 @@ labels, x_validation,model,valid_np = chargement_data(path_labels, path_validati
 liste_id = x_validation.index.tolist()
 id_input = st.text_input('Veuillez saisir l\'identifiant du client:', )
 x_validation['labels'] = labels.values
-st.write(x_validation.shape)
+
 # requests.post('http://127.0.0.1:80/credit', data={'id': id_input})
-# sample_en_regle = str(
-#     list(dataframe[dataframe['labels'] == 0].sample(5)[['SK_ID_CURR', 'labels']]['SK_ID_CURR'].values)).replace('\'',
-#                                                                                                                 '').replace(
-#     '[', '').replace(']', '')
-# sample_en_regle=str(list((labels[246008:]==0).sample(5).index)).replace('[', '').replace(']', '')
-# chaine_en_regle = 'Exemples d\'id de clients en règle : ' + sample_en_regle
-# sample_en_defaut = str(
-#     list(dataframe[dataframe['labels'] == 1].sample(5)[['SK_ID_CURR', 'labels']]['SK_ID_CURR'].values)).replace('\'',
-#                                                                                                                 '').replace(
-#     '[', '').replace(']', '')
-# chaine_en_defaut = 'Exemples d\'id de clients en défaut : ' + sample_en_defaut
+
+samples=str(list((x_validation['labels']==0).sample(5).index)).replace('[', '').replace(']', '')
+chaine = 'Exemples d\'id de clients pour tester : ' + samples
 
 
 st.title('Dashbord  Scoring Credit Model')
 st.subheader("Prédictions de scoring du client")
 
 if id_input == '':  # rien n'a été saisi
-    # st.write(chaine_en_defaut)
-    # st.write(chaine_en_regle)
+    st.write(chaine)
     st.write('Aucun ID  n\'a été saisi')
 
 # elif (int(id_input) in liste_id):  # quand un identifiant correct a été saisi on appelle l'API
@@ -162,51 +153,50 @@ elif (float(id_input) in liste_id):
     # Appel de l'API :
 
     API_url = "http://127.0.0.1:80/credit/" + str(id_input)
-    #with st.spinner('Chargement du score du client...'):
-        #print(API_url)
-        #json_url = urlopen(API_url)
-        #print(json_url)
-        #API_data = json.loads(json_url.read())
-        #print(type(ast.literal_eval(API_data)))
-        #results = ast.literal_eval(API_data)
-        #classe_predite = results['prediction']
-        #print(classe_predite)
-        #if classe_predite == 1:
-            #etat = 'client à risque'
-        #else:
-            #etat = 'client peu risqué'
-        #proba = 1 - results['proba_remboureser']
-        #prediction = results['prediction']
-        #classe_reelle = x_validation.loc[int(id_input)]['labels']
-        #classe_reelle = str(classe_reelle).replace('0', 'sans défaut').replace('1', 'avec défaut')
-        #chaine = 'Prédiction : **' + etat + '** avec **' + str(
-            #round(proba * 100)) + '%** de rembourser (classe réelle :   ' + str(classe_reelle) + ')'
+    with st.spinner('Chargement du score du client...'):
+        print(API_url)
+        json_url = urlopen(API_url)
+        print(json_url)
+        API_data = json.loads(json_url.read())
+        print(type(ast.literal_eval(API_data)))
+        results = ast.literal_eval(API_data)
+        classe_predite = results['prediction']
+        print(classe_predite)
+        if classe_predite == 1:
+            etat = 'client à risque'
+        else:
+            etat = 'client peu risqué'
+        proba = 1 - results['proba_remboureser']
+        prediction = results['prediction']
+        classe_reelle = int(x_validation.loc[int(id_input)]['labels'])
+        st.write(classe_reelle)
+        classe_reelle = str(classe_reelle).replace('0', 'sans défaut').replace('1', 'avec défaut')
+        chaine = 'Prédiction : **' + etat + '** avec **' + str(
+            round(proba * 100)) + '%** de rembourser (classe réelle :   ' + str(classe_reelle) + ')'
 
-    #st.markdown(chaine)
+    st.markdown(chaine)
     st.title("Explicabilité du modèle")
 
     explain_model(id_input, model['model'], valid_np, x_validation)
 
-    st.title("Les clients ayant des caractéristiques des proches du demandeur:")
-    # neighbor_model(dataframe, labels, id_input)
-    # # affichage de l'explication du score
-    # with st.spinner('Chargement des détails de la prédiction...'):
-    # chargement_explanation(id_input, dataframe, model['model'], valid)
-    # threshold = results['treshold']
-    # fig, ax = plt.subplots()
-    # if proba < threshold:
-    #     color = 'r'
-    # else:
-    #     color = 'g'
-    # ax.bar('prediction', height=proba, width=0.5, color=color)
-    # plt.title('Niveau de la confiance du remboursement de pret')
-    # # ax.bar('prediction', height=np.minimum(threshold, proba), width=0.5, color="b")
-    # # ax.bar('prediction', height=abs(proba - threshold), width=0.5, color="pink",
-    # # bottom=np.minimum(threshold, proba))
-    # plt.axhline(y=threshold, linewidth=0.5, color='k')
-    # plt.ylim([0, 1])
-    # ax.text(0, threshold + 0.1, str(threshold))
-    # st.pyplot(fig)
+    #st.title("Les clients ayant des caractéristiques des proches du demandeur:")
+    #neighbor_model(dataframe, labels, id_input)
+    # affichage de l'explication du score
+    threshold = results['treshold']
+    fig, ax = plt.subplots()
+    if proba < threshold:
+        color = 'r'
+    else:
+        color = 'g'
+    ax.bar('prediction', height=proba, width=0.5, color=color)
+    plt.title('Niveau de la confiance du remboursement de pret')
+    # ax.bar('prediction', height=np.minimum(threshold, proba), width=0.5, color="b")
+    # ax.bar('prediction', height=abs(proba - threshold), width=0.5, color="pink",
+    # bottom=np.minimum(threshold, proba))
+    plt.axhline(y=threshold, linewidth=0.5, color='k')
+    plt.ylim([0, 1])
+    ax.text(0, threshold + 0.1, str(threshold))
+    st.pyplot(fig)
 
     columns1 = ['', 'EXT_SOURCE_3', 'EXT_SOURCE_2', 'EXT_SOURCE_1', 'PAYMENT_RATE', 'DAYS_EMPLOYED',
                 'CONSUMER_GOODS_RATIO',

@@ -4,18 +4,22 @@ import numpy as np
 import pandas as pd
 import uvicorn
 from fastapi import FastAPI
-from model import treshold
 
 # 2. Create the app object
 app = FastAPI()
 
-with open(r"C:\Users\Utilisateur\OneDrive\Bureau\PROJET7\classifier.pkl", 'rb') as f:
+with open(r".\classifier.pkl", 'rb') as f:
     classifier = pickle.load(f)
+    with open(r'./seuil.txt', 'rb') as f:
+        contents = f.read()
+        f.close()
 
-data = pd.read_csv(r"C:\Users\Utilisateur\OneDrive\Bureau\PROJET7\valid.csv", encoding='cp1252')
-x_valid = np.load(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/val.npy')
-y_valid = np.load(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/yvalid.npy')
-res = treshold(classifier, x_valid, data, y_valid)
+data = pd.read_csv('./x_valid.csv', encoding='cp1252')
+res = float(contents)
+
+#x_valid = np.load(r'./val.npy')
+#y_valid = np.load(r'./yvalid.npy')
+#res = treshold(classifier, x_valid, data, y_valid)
 
 
 
@@ -38,17 +42,17 @@ def get_client_data(client_id: int):
     if result[0][1] > res:
         dict_final = {
             'prediction': int(prediction),
-            'proba_remboureser': float(result[0][1]),
+            'proba_non_remboureser': float(result[0][1]),
             'treshold': float(res),
-            'message': 'On est désolé  monsieur, on ne peut pas accepter votre  demande de  crédit:' f'{result}'}
+            'message': 'Monsieur, on ne peut pas accepter votre  demande de  credit:' f'{result}'}
         return json.dumps(dict_final)
 
     else:
         dict_final = {
             'prediction': int(prediction),
-            'proba_remboureser': float(result[0][1]),
+            'proba_non_remboureser': float(result[0][1]),
             'treshold': float(res),
-            'message': 'Félicitations  monsieur, votre  demande de  crédit est  acceptée:' f'{result}'}
+            'message': 'Felicitations  monsieur, votre  demande de  credit est  acceptee:' f'{result}'}
         return json.dumps(dict_final)
 
 
