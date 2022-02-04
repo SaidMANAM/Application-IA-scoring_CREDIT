@@ -8,7 +8,7 @@ from fastapi import FastAPI
 # 2. Create the app object
 app = FastAPI()
 
-with open(r".\classifier.pkl", 'rb') as f:
+with open(r"./classifier.pkl", 'rb') as f:
     classifier = pickle.load(f)
     with open(r'./seuil.txt', 'rb') as f:
         contents = f.read()
