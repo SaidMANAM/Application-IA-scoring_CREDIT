@@ -166,7 +166,7 @@ elif (float(id_input) in liste_id):
             etat = 'client à risque'
         else:
             etat = 'client peu risqué'
-        proba = 1 - results['proba_remboureser']
+        proba = 1 - results['proba_non_remboureser']
         prediction = results['prediction']
         classe_reelle = int(x_validation.loc[int(id_input)]['labels'])
         st.write(classe_reelle)
