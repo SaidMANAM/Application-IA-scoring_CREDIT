@@ -152,7 +152,7 @@ if id_input == '':  # rien n'a été saisi
 elif (float(id_input) in liste_id):
     # Appel de l'API :
 
-    API_url = "http://127.0.0.1:80/credit/" + str(id_input)
+    API_url = "https://api-scoring-fastapi.herokuapp.com/" + str(id_input)
     with st.spinner('Chargement du score du client...'):
         print(API_url)
         json_url = urlopen(API_url)
