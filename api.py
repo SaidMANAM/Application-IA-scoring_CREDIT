@@ -17,13 +17,6 @@ with open(r"./classifier.pkl", 'rb') as f:
 data = pd.read_csv('./x_valid.csv', encoding='cp1252')
 res = float(contents)
 
-#x_valid = np.load(r'./val.npy')
-#y_valid = np.load(r'./yvalid.npy')
-#res = treshold(classifier, x_valid, data, y_valid)
-
-
-
-
 # 3. Index route, opens automatically on http://127.0.0.1:80
 @app.get('/')
 def index():
