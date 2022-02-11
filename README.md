@@ -31,6 +31,7 @@ La mise en  oeuvre  d'un outil de “scoring crédit” pour calculer la probabi
 ## Technologies
 
 - FASTAPI
+- SHAP
 - STREAMLIT
 - SCIKIT-LEARN
 - Heroku
