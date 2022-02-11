@@ -22,15 +22,13 @@ import gc
 import shap
 import warnings
 import urllib
-
-# from sklearn.pipeline import Pipeline
 from imblearn.pipeline import Pipeline
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 from sklearn.metrics import make_scorer
 
 
-#Importing files from a zip repository and
+#Importing files 
 path= "https://s3-eu-west-1.amazonaws.com/static.oc-static.com/prod/courses/files/Parcours_data_scientist/Projet+-+Impl%C3%A9menter+un+mod%C3%A8le+de+scoring/Projet+Mise+en+prod+-+home-credit-default-risk.zip"
 url = urllib.request.urlopen(path)
 with zipfile.ZipFile(BytesIO(url.read())) as zfile:
@@ -41,12 +39,7 @@ with zipfile.ZipFile(BytesIO(url.read())) as zfile:
 
 
 
-# path = r"\Users\Utilisateur\Downloads\Data_P7.zip"  #### le chemin vers le répertoire zip des données
-# with zipfile.ZipFile(path, "r") as zfile:
-#     dfs = {name[:-4]: pd.read_csv(zfile.open(name), encoding='cp1252')
-#            for name in zfile.namelist()
-#            }
-#     zfile.close()
+
 categorical_columns = []
 # One-hot encoding for categorical columns with get_dummies
 def one_hot_encoder(data, nan_as_category=True, drop_first=True):
@@ -330,11 +323,7 @@ def prepare_data(random_state):
     y_tr =y_tr.astype(np.float32)
     x_vali = x_vali.astype(np.float32)
     x_val_dash=scaler.transform(x_val.sample(frac=0.1, random_state=42))
-    #data.to_csv(path_or_buf=r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/data_train.csv')
-    #data.to_pickle(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/data_tain.pkl')
     np.save(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/val', x_val_dash)
-    #np.save(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/yvalid', y_val)
-    #y_val.to_csv(r'C:/Users/Utilisateur/OneDrive/Bureau/PROJET7/y_valid.csv', index=False)
     return x_tr, x_vali, y_tr, y_val, columns, scaler, x_val, data, y
 
 
