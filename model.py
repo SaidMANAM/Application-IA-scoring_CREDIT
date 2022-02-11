@@ -22,7 +22,7 @@ from imblearn.under_sampling import RandomUnderSampler
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 from sklearn.metrics import make_scorer
 
-
+#La fonction cout métier
 def cost_function(y_true, y_pred, **kwargs):
     global x
     cost = (((y_pred == 0) & (y_true == 0)) * x['AMT_CREDIT'] * (0.03)
@@ -173,7 +173,7 @@ def cost_threshold(y_true, y_pred, X):
             - ((y_pred == 0) & (y_true == 1)) * X['AMT_CREDIT'] * (1 + 0.03))
     return np.sum(cost)
 
-
+# La fonction de calcul du seuil optimal
 def treshold(model, x_valid, exp, y_valid):
     seuils = []
     for value in np.arange(0, 1, 0.02):
