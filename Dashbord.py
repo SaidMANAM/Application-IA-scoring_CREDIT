@@ -13,38 +13,15 @@ import pickle
 import shap
 
 
-path_data = r'C:\Users\Utilisateur\OneDrive\Bureau\PROJET7\data_tain.pkl'
-# path_data = os.getcwd() +'/data_train.csv'
-# df reduced : 10 % du jeu de donnees initial
-path_valid = os.getcwd() + '/val.npy'
+
 path_labels = os.getcwd() + '/y_valid.csv'
 path_model = os.getcwd() + '/classifier.pkl'
 path_validation = os.getcwd() + '/x_valid.csv'
-#path = "https://s3-eu-west-1.amazonaws.com/static.oc-static.com/prod/courses/files/Parcours_data_scientist/Projet+-+Impl%C3%A9menter+un+mod%C3%A8le+de+scoring/Projet+Mise+en+prod+-+home-credit-default-risk.zip"
 
-
-# @st.cache(allow_output_mutation=True)  # mise en cache de la fonction pour exécution unique
-# def chargement_data(path1):
-#     url = urllib.request.urlopen(path1)
-#     with zipfile.ZipFile(BytesIO(url.read())) as zfile:
-#         dfs = {name[:-4]: pd.read_csv(zfile.open(name), encoding='cp1252')
-#                for name in zfile.namelist()
-#                }
-#         zfile.close()
-#     data, y = merging_data()
-# @st.cache(allow_output_mutation=True)  # mise en cache de la fonction pour exécution unique
-# def chargement_data(random_state):
-#     return  prepare_data(random_state)
 @st.cache(allow_output_mutation=True)  # mise en cache de la fonction pour exécution unique
-#def chargement_data(path1, path2, path3, path4):
 def chargement_data(path3, path4,path):
 
-    # dataframe = pd.read_csv(path1, dtype=np.float32)
-    # with open(path1, 'rb') as f:
-    #     dataframe = pickle.load(f)
-    # if dataframe.shape[-1] == 770:
-    #     dataframe.set_index('SK_ID_CURR', inplace=True)
-    #valid_np = np.load(path2)
+    
     with open(path, 'rb') as f:
         loaded_model = pickle.load(f)
     labels = pd.read_csv(path3, index_col=[0])
@@ -52,18 +29,13 @@ def chargement_data(path3, path4,path):
     if x_validation.shape[-1] == 770:
         x_validation.set_index('SK_ID_CURR', inplace=True)
     validation_np=loaded_model['scaler'].transform(x_validation)
-    #return dataframe, valid_np, labels, x_validation
+    
     return labels, x_validation,loaded_model,validation_np
 
 
-# @st.cache  # mise en cache de la fonction pour exécution unique
-# def chargement_model(path):
-#     with open(path, 'rb') as f:
-#         loaded_model = pickle.load(f)
-#     return loaded_model
 
 
-# def neighbor_model(x, y, id):
+# def neighbor_model(x, y, id):#Un modèle qui va nous renvoyer les 5 clients les plus semblables à notre demandeur de crédit
 #     if 'labels' in x.columns:
 #         x.drop(columns=['labels'], inplace=True)
 #     if x.shape[-1] == 770:
@@ -88,7 +60,7 @@ def st_shap(plot, height=None):
     components.html(shap_html, height=height)
 
 
-def explain_model(ide, model, data, X):
+def explain_model(ide, model, data, X):# explicabilité du modèle avec SHAP
     if 'labels' in X.columns:
         X.drop(columns=['labels'], inplace=True)
     if X.shape[-1] == 770:
@@ -111,10 +83,9 @@ def explain_model(ide, model, data, X):
     st.header('Explicabilité Locale ')
     st.subheader('Force Plot')
     shap.initjs()
-    # shap.force_plot(expected_value, shap_values[idb], feature_names=list(X.columns))
-
+    
     st_shap((shap.force_plot(expected_value, shap_values[idb], feature_names=list(X.columns))), 200)
-    # st.pyplot(fig)
+    
 
     st.subheader('Decision Plot')
     fig, ax = plt.subplots(nrows=1, ncols=1)
@@ -128,14 +99,14 @@ st.set_page_config(page_title="Said's Dashboard",
                    page_icon="☮",
                    initial_sidebar_state="expanded")
 
-#dataframe, valid, labels, validation = chargement_data(path_data, path_valid, path_labels, path_validation)
+
 
 labels, x_validation,model,valid_np = chargement_data(path_labels, path_validation,path_model)
 liste_id = x_validation.index.tolist()
 id_input = st.text_input('Veuillez saisir l\'identifiant du client:', )
 x_validation['labels'] = labels.values
 
-# requests.post('http://127.0.0.1:80/credit', data={'id': id_input})
+
 
 samples=str(list((x_validation['labels']==0).sample(5).index)).replace('[', '').replace(']', '')
 chaine = 'Exemples d\'id de clients pour tester : ' + samples
@@ -175,13 +146,13 @@ elif (float(id_input) in liste_id):
             round(proba * 100)) + '%** de rembourser (classe réelle :   ' + str(classe_reelle) + ')'
 
     st.markdown(chaine)
+    # affichage de l'explication du score
     st.title("Explicabilité du modèle")
-
     explain_model(id_input, model['model'], valid_np, x_validation)
 
     #st.title("Les clients ayant des caractéristiques des proches du demandeur:")
     #neighbor_model(dataframe, labels, id_input)
-    # affichage de l'explication du score
+    
     threshold = results['treshold']
     fig, ax = plt.subplots()
     if proba < threshold:
@@ -190,9 +161,6 @@ elif (float(id_input) in liste_id):
         color = 'g'
     ax.bar('prediction', height=proba, width=0.5, color=color)
     plt.title('Niveau de la confiance du remboursement de pret')
-    # ax.bar('prediction', height=np.minimum(threshold, proba), width=0.5, color="b")
-    # ax.bar('prediction', height=abs(proba - threshold), width=0.5, color="pink",
-    # bottom=np.minimum(threshold, proba))
     plt.axhline(y=threshold, linewidth=0.5, color='k')
     plt.ylim([0, 1])
     ax.text(0, threshold + 0.1, str(threshold))
