@@ -25,13 +25,15 @@ La mise en  oeuvre  d'un outil de “scoring crédit” pour calculer la probabi
 - Construction d'un modèle de scoring  avec Lightgbm avec choix et  optimisation de ses hyperparamètres
 - Ajout de la transparence  sur le travail du modèle avec SHAP
 - Mise en place d'une API FastAPI pour appeler le modèle de prédiction
-- Construction d'un dashboard interactif à destination des gestionnaires de relation client (Streamlit)
+- Déploiement de l'API sur Heroku:https://api-scoring-fastapi.herokuapp.com  ( Repo utilisé: https://github.com/SaidMANAM/API_scoring_model_fastapi )
+- Construction d'un dashboard interactif à destination des gestionnaires de relation client (Streamlit) et son déploiement:https://share.streamlit.io/saidmanam/application-ia-scoring_credit/main/Dashbord.py
 
 ## Technologies
 
 - FASTAPI
 - STREAMLIT
 - SCIKIT-LEARN
+- Heroku
 - SMOTE
 - Python
 - PANDAS
